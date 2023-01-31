@@ -9,7 +9,8 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "springs>=1.9.1"
+    "click>=8.0.4",
+    "boto3>=1.24.96",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -32,7 +33,7 @@ dev = [
     "flake8>=5.0",
     "ipdb>=0.13.0",
     "flake8-pyi>=22.8.1",
-    "Flake8-pyproject>=1.1.0"
+    "Flake8-pyproject>=1.1.0",
 ]
 
 [build-system]
@@ -46,7 +47,11 @@ requires = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-trouting = ["py.typed"]
+shadow_scholar = [
+    "py.typed",
+    "src/shadow_scholar/collections/athena_sql/*.sql",
+]
+
 
 [tool.black]
 line-length = 79
