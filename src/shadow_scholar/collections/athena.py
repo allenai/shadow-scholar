@@ -1,18 +1,19 @@
+from argparse import Namespace
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Union
+from typing import Union, cast
 
-import click
 from smashed.utils.io_utils import (
     MultiPath,
     copy_directory,
     remove_directory,
     remove_file,
 )
+from botocore.client import BaseClient
+import boto3
 
-from ..cli import cli
-from .utils import get_boto_client
+from shadow_scholar.cli import cli, Argument
 
 ATHENA_SQL_DIR = Path(__file__).parent / "athena_sql"
 
@@ -22,7 +23,7 @@ def wait_for_athena_query(
 ) -> bool:
     state = "RUNNING"
 
-    click.echo(f"Waiting for query {execution_id} to complete..", nl=False)
+    print(f"Waiting for {execution_id} to complete..", end='', flush=True)
 
     while max_wait > 0 and state in ["RUNNING", "QUEUED"]:
         response = client.get_query_execution(QueryExecutionId=execution_id)
@@ -33,14 +34,14 @@ def wait_for_athena_query(
         ):
             state = response["QueryExecution"]["Status"]["State"]
             if state == "SUCCEEDED":
-                click.echo(f"\nQuery {execution_id} succeeded!")
+                print(f"\nQuery {execution_id} succeeded!", flush=True)
                 return True
             elif state == "FAILED":
                 err = response["QueryExecution"]["Status"]["StateChangeReason"]
                 raise RuntimeError(f"Query {execution_id} failed: {err}")
 
         time.sleep(timeout)
-        click.echo(".", nl=False)
+        print(".", end='', flush=True)
         max_wait -= timeout
 
     raise RuntimeError(f"Query {execution_id} timed out")
@@ -68,8 +69,8 @@ def run_athena_query_and_get_result(
         );
     """
 
-    athena_client = get_boto_client("athena")
-    s3_client = get_boto_client("s3")
+    athena_client = cast(BaseClient, boto3.client("athena"))
+    s3_client = cast(BaseClient, boto3.client("s3"))
 
     response = athena_client.start_query_execution(
         QueryString=query_string,
@@ -89,55 +90,62 @@ def run_athena_query_and_get_result(
         copy_directory(s3_output_location, output_location)
         remove_directory(s3_output_location, client=s3_client)
 
-    click.echo(f"ACL Anthology written to {output_location}")
+    print(f"ACL Anthology written to {output_location}")
 
 
-@cli.command("collections.s2orc")
-@click.option(
-    "-d",
-    "--database",
-    default="s2orc_papers",
-    type=str,
-    help="Athena database name for S2ORC",
-)
-@click.option(
-    "-r", "--release", default="latest", type=str, help="S2ORC release name"
-)
-@click.option(
-    "-l",
-    "--limit",
-    default=10,
-    type=int,
-    help="Limit number of results; if 0, no limit",
-)
-@click.option(
-    "-o",
-    "--output-location",
-    required=True,
-    type=str,
-    help="Location for results; can be an S3 bucket or a local directory",
-)
-@click.option(
-    "--s3-staging",
-    default="s3://ai2-s2-research/temp/",
-    type=str,
-    help=(
-        "S3 bucket for output of Athena query; it will be removed after"
-        " execution if -o/--output-location is a local directory."
-    ),
-)
-@click.option(
-    "--output-name",
-    default=datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
-    type=str,
-    help="Name of output directory; by default, is the current date/time",
+@cli(
+    "collections.s2orc",
+    arguments=[
+        Argument(
+            '-d', '--database',
+            default='s2orc_papers',
+            type=str,
+            help='Athena database name for S2ORC'
+        ),
+        Argument(
+            '-r', '--release',
+            default='latest',
+            type=str,
+            help='S2ORC release name'
+        ),
+        Argument(
+            '-l', '--limit',
+            default=10,
+            type=int,
+            help='Limit number of results; if 0, no limit'
+        ),
+        Argument(
+            '-o', '--output-location',
+            required=True,
+            type=str,
+            help='Location for results; can be an S3 bucket or a local dir'
+        ),
+        Argument(
+            '--s3-staging',
+            default='s3://ai2-s2-research/temp/',
+            type=str,
+            help=(
+                'S3 bucket for output of Athena query; to be removed after'
+                ' execution if -o/--output-location is a local directory.'
+            )
+        ),
+        Argument(
+            '--output-name',
+            default=datetime.now().strftime('%Y-%m-%d-%H-%M-%S'),
+            type=str,
+            help=(
+                'Name of output directory; by default, '
+                'it is the current date/time'
+            )
+        )
+    ]
 )
 def get_s2orc(
     database: str,
     release: str,
     limit: int,
-    output_location: MultiPath,
-    s3_staging: MultiPath,
+    output_location: str,
+    s3_staging: str,
     output_name: str,
 ):
     """Get a sample of the S2ORC dataset from Athena."""

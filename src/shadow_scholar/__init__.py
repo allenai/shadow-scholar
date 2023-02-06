@@ -1,3 +1,1 @@
-from . import collections
-
-__all__ = ["collections"]
+from . import collections   # noqa: F401
