@@ -1,6 +1,6 @@
 [project]
 name = "shadow_scholar"
-version = "0.0.1"
+version = "0.1.0"
 description = "🪄 Meddling with papers in the dark 🔮"
 authors = [
     {name = "Luca Soldaini", email = "lucas@allenai.org" }
@@ -9,7 +9,7 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "necessary>=0.4.0"
+    "necessary>=0.4.1"
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -48,7 +48,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 shadow_scholar = [
     "py.typed",
-    "src/shadow_scholar/collections/athena_sql/*.sql",
+    "src/shadow_scholar/collections/queries/*.sql",
 ]
 
 
