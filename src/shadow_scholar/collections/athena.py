@@ -1,19 +1,20 @@
-from argparse import Namespace
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Union, cast
 
-from smashed.utils.io_utils import (
-    MultiPath,
-    copy_directory,
-    remove_directory,
-    remove_file,
-)
-from botocore.client import BaseClient
-import boto3
+from shadow_scholar.cli import cli, Argument, safe_import
 
-from shadow_scholar.cli import cli, Argument
+with safe_import():
+    from smashed.utils.io_utils import (
+        MultiPath,
+        copy_directory,
+        remove_directory,
+        remove_file,
+    )
+    from botocore.client import BaseClient
+    import boto3
+
 
 ATHENA_SQL_DIR = Path(__file__).parent / "athena_sql"
 
@@ -90,11 +91,11 @@ def run_athena_query_and_get_result(
         copy_directory(s3_output_location, output_location)
         remove_directory(s3_output_location, client=s3_client)
 
-    print(f"ACL Anthology written to {output_location}")
+    print(f"Dataset written to {output_location}")
 
 
 @cli(
-    "collections.s2orc",
+    name="collections.s2orc",
     arguments=[
         Argument(
             '-d', '--database',
@@ -138,6 +139,11 @@ def run_athena_query_and_get_result(
                 'it is the current date/time'
             )
         )
+    ],
+    requirements=[
+        'boto3>=1.20.0',
+        'botocore>=1.23.0',
+        'smashed[remote]',
     ]
 )
 def get_s2orc(

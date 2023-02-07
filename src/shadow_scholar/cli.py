@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
+from contextlib import contextmanager
 import inspect
-import pkg_resources
-
+import sys
 from typing import Any, Callable, Dict, Type, TypeVar, Optional, List, Tuple
 
 from typing_extensions import ParamSpec, Concatenate
@@ -58,12 +58,6 @@ class Argument:
         }
 
 
-class Requirement:
-    """Holds package requirements for a function."""
-    def __init__(self, req_txt: str) -> None:
-        import ipdb; ipdb.set_trace()
-
-
 class Registry:
     """A registry to hold all the functions decorated with @cli."""
 
@@ -75,7 +69,8 @@ class Registry:
         return cls.__instance__
 
     def __init__(self) -> None:
-        self._registry: Dict[str, Callable] = {}
+        self._callable_registry: Dict[str, Callable] = {}
+        self._requirements_registry: Dict[str, List[str]] = {}
 
     def cli(
         self,
@@ -118,12 +113,20 @@ class Registry:
             is_entrypoint = entrypoint
 
             # check that all requirements are met
-            necessary(func_requirements)    # pyright: ignore
+            missing_requirements = [
+                req for req in func_requirements
+                if not necessary(req, soft=True)
+            ]
 
             def wrapper(*args: PS.args, **kwargs: PS.kwargs) -> RT:
                 ap = ArgumentParser(f'shadow-scholar {func_arg_name}')
                 for arg in func_arguments:
                     ap.add_argument(*arg.args, **arg.kwargs)
+
+                if missing_requirements:
+                    print('The following requirements are missing:', end=' ')
+                    print(' '.join(missing_requirements))
+                    sys.exit(1)
 
                 opts, *_ = ap.parse_known_args()
 
@@ -132,12 +135,12 @@ class Registry:
 
                 return func(**parsed_args)      # pyright: ignore
 
-            if is_entrypoint and func_arg_name in self._registry:
+            if is_entrypoint and func_arg_name in self._callable_registry:
                 raise ValueError(
                     f'Entry point {func_arg_name} already exists'
                 )
             elif is_entrypoint:
-                self._registry[func_arg_name] = wrapper
+                self._callable_registry[func_arg_name] = wrapper
             return func
 
         return decorator
@@ -145,16 +148,34 @@ class Registry:
     def run(self):
         """Creates a click command group for all registered functions."""
         parser = ArgumentParser("shadow-scholar")
-        parser.add_argument('entrypoint', choices=self._registry.keys())
+        parser.add_argument('entrypoint', choices=self._callable_registry.keys())
         opts, _ = parser.parse_known_args()
 
-        if opts.entrypoint in self._registry:
-            return self._registry[opts.entrypoint]()
+        if opts.entrypoint in self._callable_registry:
+            return self._callable_registry[opts.entrypoint]()
 
         raise ValueError(f'No entrypoint found for {opts.entrypoint}')
+
+
+@contextmanager
+def safe_import():
+    """Context manager to safely import a package.
+
+    Args:
+        package (str): Name of the package to import.
+    """
+    try:
+        yield
+    except (ModuleNotFoundError, ImportError):
+        pass
 
 
 run = Registry().run
 cli = Registry().cli
 
-__all__ = ['run', 'cli']
+__all__ = [
+    'run',
+    'cli',
+    'Argument',
+    'safe_import'
+]
