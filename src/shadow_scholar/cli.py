@@ -1,11 +1,13 @@
+from functools import partial
 import inspect
-import sys
 from argparse import ArgumentParser
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import (
+    Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar
+)
 
 from necessary import necessary
-from typing_extensions import Concatenate, ParamSpec
+from typing_extensions import ParamSpec
 
 # parameter spec
 PS = ParamSpec("PS")
@@ -55,6 +57,90 @@ class Argument:
         }
 
 
+class EntryPoint(Generic[PS, RT]):
+    def __init__(
+        self,
+        name: str,
+        func: Callable[PS, RT],
+        args: List[Argument],
+        reqs: List[str],
+    ):
+        self.name = name
+        self.func = func
+        self.args = args
+        self.reqs = reqs
+
+        # check that all requirements are met (error raised later if not)
+        self.missing_reqs = [r for r in reqs if not necessary(r, soft=True)]
+
+    def __call__(self, *args: PS.args, **kwargs: PS.kwargs) -> RT:
+        """Run the function."""
+
+        if self.missing_reqs:
+            raise ModuleNotFoundError(
+                f"Missing requirements: {', '.join(self.missing_reqs)}"
+            )
+        return self.func(*args, **kwargs)
+
+    def cli(self) -> RT:
+        """Run the function from the command line."""
+        ap = ArgumentParser(f"shadow-scholar {self.name}")
+        for arg in self.args:
+            ap.add_argument(*arg.args, **arg.kwargs)
+        opts, *_ = ap.parse_known_args()
+
+        parsed_args = inspect.signature(self.func).bind(vars(opts)).arguments
+        return self.func(**parsed_args)  # pyright: ignore
+
+    @classmethod
+    def decorate(
+        cls,
+        func: Callable[PS, RT],
+        name: Optional[str] = None,
+        arguments: Optional[List[Argument]] = None,
+        requirements: Optional[List[str]] = None,
+    ) -> 'EntryPoint[PS, RT]':
+        """Decorator designed to add function to a registry alongside
+        all its arguments and requirements.
+
+        We add the requirement for future parsing, rather than
+        building a ArgumentParser here, for two reasons:
+        1. We want to be able for all decorated functions to be able to
+            use overlapping arguments, and
+        2. Creating a single parser here might lead to a lot of unintended
+            side effects.
+
+        Args:
+            func (Callable): The function to be decorated.
+            name (str, optional): Name to use for the function when it is
+                called from the command line. If none is provided, the
+                function name is used. Defaults to None.
+            arguments (List[Argument], optional): A list of Argument objects
+                to be passed to the ArgumentParser. The available options
+                are the same as those for argparse.ArgumentParser.add_argument.
+                Defaults to None.
+            requirements (Optional[List[str]], optional): A list of required
+                packages for the function to run. Defaults to None.
+        """
+
+        name = name or func.__name__
+        arguments = arguments or []
+        func_requirements = requirements or []
+
+        # create the entry point by wrapping the function
+        entry_point = cls(
+            name=name,
+            func=func,
+            args=arguments,
+            reqs=func_requirements,
+        )
+
+        # add the function to the registry
+        Registry().add(entry_point)
+
+        return entry_point
+
+
 class Registry:
     """A registry to hold all the functions decorated with @cli."""
 
@@ -66,16 +152,21 @@ class Registry:
         return cls.__instance__
 
     def __init__(self) -> None:
-        self._callable_registry: Dict[str, Callable] = {}
-        self._requirements_registry: Dict[str, List[str]] = {}
+        self._registry: Dict[str, Callable] = {}
+
+    def add(self, entry_point: EntryPoint) -> None:
+        """Add an entry point to the registry."""
+        if entry_point.name in self._registry:
+            raise KeyError(f"Func {entry_point.name} already in the registry")
+
+        self._registry[entry_point.name] = entry_point
 
     def cli(
         self,
         name: Optional[str] = None,
         arguments: Optional[List[Argument]] = None,
         requirements: Optional[List[str]] = None,
-        entrypoint: bool = True,
-    ):
+    ) -> Callable[[Callable[PS, RT]], 'EntryPoint[PS, RT]']:
         """A decorator to add a function to the registry.
 
         Args:
@@ -87,73 +178,25 @@ class Registry:
                 are the same as those for argparse.ArgumentParser.add_argument.
                 Defaults to None.
             requirements (Optional[List[str]], optional): A list of required
-            entrypoint (bool, optional): _description_. Defaults to True.
         """
-
-        def decorator(
-            func: Callable[Concatenate[PS], RT]
-        ) -> Callable[Concatenate[PS], RT]:
-            """Decorator designed to add function to a registry alongside
-            all its arguments and requirements.
-
-            We add the requirement for future parsing, rather than
-            building a ArgumentParser here, for two reasons:
-            1. We want to be able for all decorated functions to be able to
-               use overlapping arguments, and
-            2. Creating a single parser here might lead to a lot of unintended
-               side effects.
-            """
-
-            func_arg_name = name or func.__name__
-            func_arguments = arguments or []
-            func_requirements = requirements or []
-            is_entrypoint = entrypoint
-
-            # check that all requirements are met
-            missing_requirements = [
-                req
-                for req in func_requirements
-                if not necessary(req, soft=True)
-            ]
-
-            def wrapper(*args: PS.args, **kwargs: PS.kwargs) -> RT:
-                ap = ArgumentParser(f"shadow-scholar {func_arg_name}")
-                for arg in func_arguments:
-                    ap.add_argument(*arg.args, **arg.kwargs)
-
-                if missing_requirements:
-                    print("The following requirements are missing:", end=" ")
-                    print(" ".join(missing_requirements))
-                    sys.exit(1)
-
-                opts, *_ = ap.parse_known_args()
-
-                parsed_args = (
-                    inspect.signature(func)
-                    .bind(*args, **{**vars(opts), **kwargs})
-                    .arguments
-                )
-
-                return func(**parsed_args)  # pyright: ignore
-
-            if is_entrypoint and func_arg_name in self._callable_registry:
-                raise ValueError(f"Entry point {func_arg_name} already exists")
-            elif is_entrypoint:
-                self._callable_registry[func_arg_name] = wrapper
-            return func
-
-        return decorator
+        decorated = partial(
+            EntryPoint.decorate,    # type: ignore
+            name=name,
+            arguments=arguments,
+            requirements=requirements
+        )
+        return decorated   # type: ignore
 
     def run(self):
         """Creates a click command group for all registered functions."""
         parser = ArgumentParser("shadow-scholar")
         parser.add_argument(
-            "entrypoint", choices=self._callable_registry.keys()
+            "entrypoint", choices=self._registry.keys()
         )
         opts, _ = parser.parse_known_args()
 
-        if opts.entrypoint in self._callable_registry:
-            return self._callable_registry[opts.entrypoint]()
+        if opts.entrypoint in self._registry:
+            return self._registry[opts.entrypoint]()
 
         raise ValueError(f"No entrypoint found for {opts.entrypoint}")
 

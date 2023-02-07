@@ -1,5 +1,5 @@
-from .collections.athena import get_s2orc
+from .collections.athena import get_s2ag_abstracts
 
 __all__ = [
-    "get_s2orc",
+    "get_s2ag_abstracts",
 ]
