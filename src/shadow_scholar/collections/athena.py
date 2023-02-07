@@ -3,17 +3,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Union, cast
 
-from shadow_scholar.cli import cli, Argument, safe_import
+from shadow_scholar.cli import Argument, cli, safe_import
 
 with safe_import():
+    import boto3
+    from botocore.client import BaseClient
     from smashed.utils.io_utils import (
         MultiPath,
         copy_directory,
         remove_directory,
         remove_file,
     )
-    from botocore.client import BaseClient
-    import boto3
 
 
 ATHENA_SQL_DIR = Path(__file__).parent / "athena_sql"
@@ -24,7 +24,7 @@ def wait_for_athena_query(
 ) -> bool:
     state = "RUNNING"
 
-    print(f"Waiting for {execution_id} to complete..", end='', flush=True)
+    print(f"Waiting for {execution_id} to complete..", end="", flush=True)
 
     while max_wait > 0 and state in ["RUNNING", "QUEUED"]:
         response = client.get_query_execution(QueryExecutionId=execution_id)
@@ -42,7 +42,7 @@ def wait_for_athena_query(
                 raise RuntimeError(f"Query {execution_id} failed: {err}")
 
         time.sleep(timeout)
-        print(".", end='', flush=True)
+        print(".", end="", flush=True)
         max_wait -= timeout
 
     raise RuntimeError(f"Query {execution_id} timed out")
@@ -98,53 +98,57 @@ def run_athena_query_and_get_result(
     name="collections.s2orc",
     arguments=[
         Argument(
-            '-d', '--database',
-            default='s2orc_papers',
+            "-d",
+            "--database",
+            default="s2orc_papers",
             type=str,
-            help='Athena database name for S2ORC'
+            help="Athena database name for S2ORC",
         ),
         Argument(
-            '-r', '--release',
-            default='latest',
+            "-r",
+            "--release",
+            default="latest",
             type=str,
-            help='S2ORC release name'
+            help="S2ORC release name",
         ),
         Argument(
-            '-l', '--limit',
+            "-l",
+            "--limit",
             default=10,
             type=int,
-            help='Limit number of results; if 0, no limit'
+            help="Limit number of results; if 0, no limit",
         ),
         Argument(
-            '-o', '--output-location',
+            "-o",
+            "--output-location",
             required=True,
             type=str,
-            help='Location for results; can be an S3 bucket or a local dir'
+            help="Location for results; can be an S3 bucket or a local dir",
         ),
         Argument(
-            '--s3-staging',
-            default='s3://ai2-s2-research/temp/',
+            "--s3-staging",
+            default="s3://ai2-s2-research/temp/",
             type=str,
             help=(
-                'S3 bucket for output of Athena query; to be removed after'
-                ' execution if -o/--output-location is a local directory.'
-            )
+                "S3 bucket for output of Athena query; to be removed after"
+                " execution if -o/--output-location is a local directory."
+            ),
         ),
         Argument(
-            '--output-name',
-            default=datetime.now().strftime('%Y-%m-%d-%H-%M-%S'),
+            "--output-name",
+            default=datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
             type=str,
             help=(
-                'Name of output directory; by default, '
-                'it is the current date/time'
-            )
-        )
+                "Name of output directory; by default, "
+                "it is the current date/time"
+            ),
+        ),
     ],
     requirements=[
-        'boto3>=1.20.0',
-        'botocore>=1.23.0',
-        'smashed[remote]',
-    ]
+        "boto3>=1.20.0",
+        "botocore>=1.23.0",
+        "smashed[remote]",
+    ],
 )
 def get_s2orc(
     database: str,
