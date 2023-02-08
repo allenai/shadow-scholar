@@ -1,9 +1,17 @@
-from functools import partial
 import inspect
 from argparse import ArgumentParser
 from contextlib import contextmanager
+from functools import partial
 from typing import (
-    Any, Callable, Dict, Generic, List, Optional, Tuple, Type, TypeVar
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
 )
 
 from necessary import necessary
@@ -82,14 +90,14 @@ class EntryPoint(Generic[PS, RT]):
             )
         return self.func(*args, **kwargs)
 
-    def cli(self) -> RT:
+    def cli(self, args: Optional[List[str]] = None) -> RT:
         """Run the function from the command line."""
         ap = ArgumentParser(f"shadow-scholar {self.name}")
         for arg in self.args:
             ap.add_argument(*arg.args, **arg.kwargs)
-        opts, *_ = ap.parse_known_args()
+        opts, *_ = ap.parse_known_args(args)
 
-        parsed_args = inspect.signature(self.func).bind(vars(opts)).arguments
+        parsed_args = inspect.signature(self.func).bind(**vars(opts)).arguments
         return self.func(**parsed_args)  # pyright: ignore
 
     @classmethod
@@ -99,7 +107,7 @@ class EntryPoint(Generic[PS, RT]):
         name: Optional[str] = None,
         arguments: Optional[List[Argument]] = None,
         requirements: Optional[List[str]] = None,
-    ) -> 'EntryPoint[PS, RT]':
+    ) -> "EntryPoint[PS, RT]":
         """Decorator designed to add function to a registry alongside
         all its arguments and requirements.
 
@@ -144,21 +152,23 @@ class EntryPoint(Generic[PS, RT]):
 class Registry:
     """A registry to hold all the functions decorated with @cli."""
 
+    __instance__: "Registry"
+    _registry: Dict[str, "EntryPoint"]
+
     def __new__(cls):
         """Singleton pattern for the registry."""
         if not hasattr(cls, "__instance__"):
             cls.__instance__ = super(Registry, cls).__new__(cls)
-            cls.__instance__.__init__()
         return cls.__instance__
 
     def __init__(self) -> None:
-        self._registry: Dict[str, Callable] = {}
+        if not hasattr(self, "_registry"):
+            self._registry = {}
 
     def add(self, entry_point: EntryPoint) -> None:
         """Add an entry point to the registry."""
         if entry_point.name in self._registry:
             raise KeyError(f"Func {entry_point.name} already in the registry")
-
         self._registry[entry_point.name] = entry_point
 
     def cli(
@@ -166,7 +176,7 @@ class Registry:
         name: Optional[str] = None,
         arguments: Optional[List[Argument]] = None,
         requirements: Optional[List[str]] = None,
-    ) -> Callable[[Callable[PS, RT]], 'EntryPoint[PS, RT]']:
+    ) -> Callable[[Callable[PS, RT]], "EntryPoint[PS, RT]"]:
         """A decorator to add a function to the registry.
 
         Args:
@@ -180,23 +190,21 @@ class Registry:
             requirements (Optional[List[str]], optional): A list of required
         """
         decorated = partial(
-            EntryPoint.decorate,    # type: ignore
+            EntryPoint.decorate,  # type: ignore
             name=name,
             arguments=arguments,
-            requirements=requirements
+            requirements=requirements,
         )
-        return decorated   # type: ignore
+        return decorated  # type: ignore
 
     def run(self):
         """Creates a click command group for all registered functions."""
         parser = ArgumentParser("shadow-scholar")
-        parser.add_argument(
-            "entrypoint", choices=self._registry.keys()
-        )
-        opts, _ = parser.parse_known_args()
+        parser.add_argument("entrypoint", choices=self._registry.keys())
+        opts, rest = parser.parse_known_args()
 
         if opts.entrypoint in self._registry:
-            return self._registry[opts.entrypoint]()
+            return self._registry[opts.entrypoint].cli(rest)
 
         raise ValueError(f"No entrypoint found for {opts.entrypoint}")
 

@@ -1,8 +1,8 @@
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union, cast, Dict, Any
 from string import Formatter
+from typing import Any, Dict, Optional, Union, cast
 
 from shadow_scholar.cli import Argument, cli, safe_import
 
@@ -50,11 +50,14 @@ def wait_for_athena_query(
 
 
 @cli(
-    name='collections.run_athena_query',
+    name="collections.run_athena_query",
     arguments=[
         Argument(
-            '-q', '--query-path', type=str, required=True,
-            help='Path to the sql query file to run.'
+            "-q",
+            "--query-path",
+            type=str,
+            required=True,
+            help="Path to the sql query file to run.",
         ),
         Argument(
             "--s3-staging",
@@ -69,14 +72,10 @@ def wait_for_athena_query(
             "--output-name",
             default=datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
             type=str,
-            help="Name of output directory; by default, current date/time"
+            help="Name of output directory; by default, current date/time",
         ),
     ],
-    requirements=[
-        'boto3',
-        'botocore',
-        'smashed[remote]'
-    ]
+    requirements=["boto3", "botocore", "smashed[remote]"],
 )
 def run_athena_query_and_get_result(
     query_path: str,
@@ -98,8 +97,8 @@ def run_athena_query_and_get_result(
         t[1] for t in Formatter().parse(query_string) if t[1] is not None
     ]
     formatting_data = {
-        **{k: '' for k in formatting_keys},
-        **(template_args or {})
+        **{k: "" for k in formatting_keys},
+        **(template_args or {}),
     }
 
     formatted_query_string = query_string.format(**formatting_data)
@@ -139,13 +138,13 @@ def run_athena_query_and_get_result(
             help="Limit number of results; if 0, no limit",
         ),
         Argument(
-            '-a',
-            '--abstract',
+            "-a",
+            "--abstract",
             default=None,
             type=str,
-            help='text to search in the abstract'
+            help="text to search in the abstract",
         ),
-        *run_athena_query_and_get_result.args
+        *run_athena_query_and_get_result.args,
     ],
     requirements=run_athena_query_and_get_result.reqs,
 )
@@ -169,5 +168,5 @@ def get_s2ag_abstracts(
         s3_staging=s3_staging,
         output_location=output_location,
         output_name=output_name,
-        template_args=template_args
+        template_args=template_args,
     )
