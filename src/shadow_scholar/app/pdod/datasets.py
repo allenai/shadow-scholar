@@ -25,8 +25,8 @@ class Container:
 
     @classmethod
     def _recursive(cls, obj):
-        if hasattr(obj, "to_json"):
-            return obj.to_json()
+        if hasattr(obj, "as_dict"):
+            return obj.as_dict()
         if isinstance(obj, abc.Mapping):
             return {k: cls._recursive(v) for k, v in obj.items()}
         elif isinstance(obj, abc.Iterable) and not isinstance(obj, str):
@@ -52,6 +52,9 @@ class Id(Container):
     @classmethod
     def parse(cls, s: Union[IdType, "Id"]) -> "Id":
         return Id(s) if isinstance(s, (str, int)) else s
+
+    def as_dict(self) -> IdType:  # type: ignore
+        return self.id[0]
 
     @property
     def head(self) -> IdType:
@@ -84,9 +87,12 @@ class Document(Container):
     text: str
     label: Optional[int]
     score: Optional[float]
+    qid: Optional[Id]
 
     def __init__(self, **kwargs):
-        super().__init__(**{"label": None, "score": None, **kwargs})
+        super().__init__(
+            **{"label": None, "score": None, "qid": None, **kwargs}
+        )
         self.did = Id.parse(self.did)
 
     def __hash__(self) -> int:
@@ -100,6 +106,9 @@ class Document(Container):
 
     def rank(self, score: float) -> "Document":
         return self.new(score=score)
+
+    def query(self, qid: Id) -> "Document":
+        return self.new(qid=qid)
 
 
 class Qrel(Container):

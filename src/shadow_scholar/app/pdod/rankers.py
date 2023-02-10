@@ -249,7 +249,7 @@ class SentenceTransformerRanker(BaseRanker[torch.Tensor]):
         )
         corpus_vec = torch.vstack(self.encode(docs, norm=self.norm_query))
 
-        scores = corpus_vec @ query_vec.T
+        scores = corpus_vec @ query_vec.reshape(-1, 1)
 
         scores = scores.squeeze().tolist()
         scored_docs = [d.rank(score=s) for d, s in zip(docs, scores)]

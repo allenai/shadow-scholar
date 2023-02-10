@@ -35,6 +35,45 @@ Data can be provided in two formats:
         `rel`.
 
 
+### Examples
+
+Slice documents sentence by sentence and rank them using TF-IDF. Query will
+be supplied interactively.
+
+
+```bash
+python -m shadow_scholar app.pdod \
+    -dp "examples/pdod/docs.jsonl" \
+    -rn "tfidf" \
+    -sl "sent"
+```
+
+Slice documents in blocks of 64 tokens with a 32 token overlap and rank them
+using dense embeddings (encoded using Contriver). Queries will be supplied
+interactively.
+
+```bash
+python -m shadow_scholar app.pdod \
+    -dp "examples/pdod/docs.jsonl" \
+    -rn "dense" \
+    -rk '{"model_name_or_path": "facebook/contriever"}' \
+    -sl "block" \
+    -sk '{"length": 32, "stride": 0.5}'
+```
+
+Slice documents by sentence, rank them using dense embeddings (encoded using
+Contriver), and run for queries at the given path. Results will be written
+to an output file.
+
+```bash
+python -m shadow_scholar app.pdod \
+    -dp "examples/pdod/docs.jsonl" \
+    -rn "dense" \
+    -rk '{"model_name_or_path": "facebook/contriever"}' \
+    -sl "sent" \
+    -qp "examples/pdod/queries.jsonl" \
+    -op "examples/pdod/results_dense_sent.jsonl"
+```
 
 ## Web Application
 

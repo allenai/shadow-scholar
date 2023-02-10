@@ -89,7 +89,8 @@ class BlockSlicer(SentenceSlicer):
 
     def slice_text(self, doc: Document) -> List[Document]:
         docs = []
-        for i in range(0, len(doc.text), self.stride):
-            text = doc.text[i : i + self.length]
-            docs.append(doc.new(text=str(text)))
+        parsed_doc = self.nlp(doc.text)
+        for i in range(0, len(parsed_doc), self.stride):
+            span = parsed_doc[i : i + self.length]
+            docs.append(doc.new(text=span.text))
         return docs

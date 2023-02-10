@@ -1,4 +1,5 @@
 import json
+import os
 from typing import List, Literal, Optional
 
 from shadow_scholar.cli import Argument, cli, load_kwargs
@@ -60,8 +61,8 @@ from .slicers import slicer_registry
             default="judged",
         ),
         Argument(
-            "-ep",
-            "--dest-path",
+            "-op",
+            "--output-path",
             help="If provided, path to write results to",
         ),
         Argument(
@@ -97,7 +98,7 @@ def run_pdod(
     queries_path: Optional[str] = None,
     qrels_path: Optional[str] = None,
     qrels_mode: Literal["open", "judged"] = "judged",
-    dest_path: Optional[str] = None,
+    output_path: Optional[str] = None,
     slicer_name: Optional[str] = None,
     slicer_kwargs: Optional[dict] = None,
 ):
@@ -121,7 +122,7 @@ def run_pdod(
 
     ranker = ranker_registry.get(ranker_name)(**(ranker_kwargs or {}))
     ranker.warmup(dataset.documents)
-    output: List[List[Document]] = []
+    output: List[Document] = []
 
     while True:
         if is_interactive:
@@ -149,16 +150,20 @@ def run_pdod(
         scored_docs = ranker.score(query.text, docs)
 
         if is_interactive:
+            width = os.get_terminal_size().columns
+            # only show the top 5 results
             for doc in scored_docs[:5]:
-                print(f"{doc.score:.3f} {doc.text[:40]}...")
+                print(f"{doc.score:.3f} {doc.text[:width - 10]}...")
             print()
+        else:
+            scored_docs = [doc.query(query.qid) for doc in scored_docs]
 
-        output.append(scored_docs)
+        output.extend(scored_docs)
 
-    if dest_path is not None:
-        with open(dest_path, "w") as f:
-            data = [[doc.as_dict() for doc in docs] for docs in output]
-            f.write(json.dumps(data) + "\n")
+    if output_path is not None:
+        with open(output_path, "w") as f:
+            for doc in output:
+                f.write(json.dumps(doc.as_dict()) + "\n")
 
     if len(dataset.qrels) > 0:
         raise NotImplementedError("Evaluation not yet implemented")
