@@ -79,8 +79,8 @@ def wait_for_athena_query(
 )
 def run_athena_query_and_get_result(
     query_path: str,
-    s3_staging: Union[str, MultiPath],
-    output_location: Union[str, MultiPath],
+    s3_staging: Union[str, "MultiPath"],
+    output_location: Union[str, "MultiPath"],
     output_name: str,
     template_args: Optional[Dict[str, Any]] = None,
 ):
