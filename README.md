@@ -23,6 +23,10 @@ For a full list of commands, run `python -m shadow_scholar -h`.
 
 1. `collections.s2orc`: Collects data from the [S2ORC](https://allenai.org/data/s2orc) dataset using an Athena query.
 
+### Applications
+
+1. `app.pdod`: Runs models for the Paper Details On Demand project.
+
 ## Getting Access to AWS services
 
 To run the scripts that use AWS services, you will need to have access to the following services:

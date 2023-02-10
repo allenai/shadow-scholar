@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
+import sys
 from typing import (
     Any,
     Callable,
@@ -106,6 +107,7 @@ class EntryPoint(Generic[PS, RT]):
         ap = ArgumentParser(f"shadow-scholar {self.name}")
         for arg in self.args:
             ap.add_argument(*arg.args, **arg.kwargs)
+
         opts, *_ = ap.parse_known_args(args)
 
         parsed_args = inspect.signature(self.func).bind(**vars(opts)).arguments
@@ -212,7 +214,16 @@ class Registry:
         """Creates a click command group for all registered functions."""
         parser = ArgumentParser("shadow-scholar")
         parser.add_argument("entrypoint", choices=self._registry.keys())
-        opts, rest = parser.parse_known_args()
+
+        # stop at the first argument that does not start with a dash
+        # the +2 is needed because sys.argv[0] is the script name (that
+        # accounts for the first +1) and slicing is exclusive (that accounts
+        # for the second +1).
+        i = [arg.startswith('-') for arg in sys.argv[1:]].index(False) + 2
+        args = sys.argv[1:i]
+
+        opts, rest = parser.parse_known_args(args)
+        rest += sys.argv[i:]
 
         if opts.entrypoint in self._registry:
             return self._registry[opts.entrypoint].cli(rest)
