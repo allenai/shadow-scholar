@@ -7,11 +7,10 @@ from queue import Queue
 from threading import Thread
 from typing import Iterable, List, Literal, Optional, Union
 
-from tqdm import tqdm
-
 from shadow_scholar.cli import Argument, cli, safe_import
 
 with safe_import():
+    from tqdm import tqdm
     from smashed.utils.io_utils import (
         MultiPath,
         open_file_for_read,
