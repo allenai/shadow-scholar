@@ -9,7 +9,10 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "necessary>=0.4.1"
+    "necessary>=0.4.1",
+    "typing_extensions>=4.0.0",
+    "platformdirs>=2.4.0",
+    "cachetools>=4.2.4"
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

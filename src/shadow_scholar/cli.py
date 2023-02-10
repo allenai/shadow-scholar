@@ -1,7 +1,9 @@
 import inspect
+import json
 from argparse import ArgumentParser
 from contextlib import contextmanager
 from functools import partial
+from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -12,6 +14,7 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
+    Union,
 )
 
 from necessary import necessary
@@ -27,7 +30,15 @@ RT = TypeVar("RT")
 T = TypeVar("T")
 
 # sentinel value
-MISSING = object()
+M = object()
+
+
+# sentinel value for missing arguments
+class _M:
+    ...  # noqa: E701
+
+
+M = _M()  # noqa: E305
 
 
 class Argument:
@@ -39,29 +50,29 @@ class Argument:
     def __init__(
         self,
         *name_or_flags: str,
-        action: Optional[str] = MISSING,  # type: ignore
-        nargs: Optional[str] = MISSING,  # type: ignore
-        const: Optional[str] = MISSING,  # type: ignore
-        default: Optional[T] = MISSING,  # type: ignore
-        type: Optional[Type[T]] = MISSING,  # type: ignore
-        choices: Optional[List[str]] = MISSING,  # type: ignore
-        required: Optional[bool] = MISSING,  # type: ignore
-        help: Optional[str] = MISSING,  # type: ignore
-        metavar: Optional[str] = MISSING,  # type: ignore
-        dest: Optional[str] = MISSING,  # type: ignore
+        action: Optional[str] = M,  # type: ignore
+        nargs: Optional[str] = M,  # type: ignore
+        const: Optional[str] = M,  # type: ignore
+        default: Optional[T] = M,  # type: ignore
+        type: Union[Type[T], Callable[..., T], None] = _M,  # type: ignore
+        choices: Optional[List[str]] = M,  # type: ignore
+        required: Optional[bool] = M,  # type: ignore
+        help: Optional[str] = M,  # type: ignore
+        metavar: Optional[str] = M,  # type: ignore
+        dest: Optional[str] = M,  # type: ignore
     ):
         self.args = name_or_flags
         self.kwargs = {
-            **({"action": action} if action is not MISSING else {}),
-            **({"nargs": nargs} if nargs is not MISSING else {}),
-            **({"const": const} if const is not MISSING else {}),
-            **({"default": default} if default is not MISSING else {}),
-            **({"type": type} if type is not MISSING else {}),
-            **({"choices": choices} if choices is not MISSING else {}),
-            **({"required": required} if required is not MISSING else {}),
-            **({"help": help} if help is not MISSING else {}),
-            **({"metavar": metavar} if metavar is not MISSING else {}),
-            **({"dest": dest} if dest is not MISSING else {}),
+            **({"action": action} if action is not M else {}),
+            **({"nargs": nargs} if nargs is not M else {}),
+            **({"const": const} if const is not M else {}),
+            **({"default": default} if default is not M else {}),
+            **({"type": type} if type is not M else {}),
+            **({"choices": choices} if choices is not M else {}),
+            **({"required": required} if required is not M else {}),
+            **({"help": help} if help is not M else {}),
+            **({"metavar": metavar} if metavar is not M else {}),
+            **({"dest": dest} if dest is not M else {}),
         }
 
 
@@ -222,7 +233,14 @@ def safe_import():
         pass
 
 
+def load_kwargs(path_or_json: str) -> Dict[str, Any]:
+    if Path(path_or_json).exists():
+        with open(path_or_json) as f:
+            path_or_json = f.read()
+    return json.loads(path_or_json)
+
+
 run = Registry().run
 cli = Registry().cli
 
-__all__ = ["run", "cli", "Argument", "safe_import"]
+__all__ = ["run", "cli", "Argument", "safe_import", "load_kwargs"]
