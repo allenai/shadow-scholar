@@ -194,7 +194,7 @@ class PoolingModes(Enum):
 
 @ranker_registry.add("dense")
 class SentenceTransformerRanker(BaseRanker["torch.Tensor"]):
-    model: SentenceTransformer
+    model: "SentenceTransformer"
 
     def __init__(
         self,
