@@ -219,7 +219,10 @@ class Registry:
         # the +2 is needed because sys.argv[0] is the script name (that
         # accounts for the first +1) and slicing is exclusive (that accounts
         # for the second +1).
-        i = [arg.startswith('-') for arg in sys.argv[1:]].index(False) + 2
+        try:
+            i = [arg.startswith('-') for arg in sys.argv[1:]].index(False)
+        except ValueError:
+            i = len(sys.argv)
         args = sys.argv[1:i]
 
         opts, rest = parser.parse_known_args(args)
