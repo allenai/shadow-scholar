@@ -26,7 +26,7 @@ with safe_import():
 
 ranker_registry: CallableRegistry["BaseRanker"] = CallableRegistry()
 
-OutputType = TypeVar("OutputType", torch.Tensor, "np.ndarray")
+OutputType = TypeVar("OutputType", "torch.Tensor", "np.ndarray")
 
 
 class BaseRanker(Generic[OutputType]):

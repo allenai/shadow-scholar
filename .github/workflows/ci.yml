@@ -29,20 +29,20 @@ jobs:
         task:
           - name: Style
             run: |
-              isort --check .
-              black --check .
+              isort --check src/ tests/
+              black --check src/ tests/
 
           - name: Lint
             run: |
-              flake8 .
+              flake8 src/ tests/
 
           - name: Type check
             run: |
-              mypy .
+              mypy src/ tests/
 
           - name: Test
             run: |
-              pytest -v --color=yes tests/
+              pytest -vs --color=yes tests/
 
     steps:
       - uses: actions/checkout@v3
