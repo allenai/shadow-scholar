@@ -21,11 +21,25 @@ class Container:
 
     @classmethod
     def fields(cls) -> Tuple[str, ...]:
-        return cls.__slots__
+        return tuple(getattr(cls, "__annotations__", {}).keys())
+
+    @classmethod
+    def _recursive(cls, obj):
+        if hasattr(obj, "to_json"):
+            return obj.to_json()
+        if isinstance(obj, abc.Mapping):
+            return {k: cls._recursive(v) for k, v in obj.items()}
+        elif isinstance(obj, abc.Iterable) and not isinstance(obj, str):
+            return [cls._recursive(v) for v in obj]
+        else:
+            return obj
+
+    def as_dict(self) -> dict:
+        return {k: self._recursive(getattr(self, k)) for k in self.fields()}
 
 
 class Id(Container):
-    __slots__ = "id",
+    __slots__ = ("id",)
 
     id: Tuple[IdType, ...]
 
@@ -72,21 +86,8 @@ class Document(Container):
     score: Optional[float]
 
     def __init__(self, **kwargs):
-        super().__init__(**{'label': None, 'score': None, **kwargs})
+        super().__init__(**{"label": None, "score": None, **kwargs})
         self.did = Id.parse(self.did)
-
-    def as_dict(self) -> dict:
-        def _recursive(obj):
-            if hasattr(obj, "to_json"):
-                return obj.to_json()
-            if isinstance(obj, abc.Mapping):
-                return {k: _recursive(v) for k, v in obj.items()}
-            elif isinstance(obj, abc.Iterable) and not isinstance(obj, str):
-                return [_recursive(v) for v in obj]
-            else:
-                return obj
-
-        return {k: _recursive(getattr(self, k)) for k in self.fields()}
 
     def __hash__(self) -> int:
         return hash((self.did, self.text))
@@ -114,7 +115,7 @@ class Qrel(Container):
         self.did = Id.parse(self.did)
 
 
-class Dataset:
+class Dataset(Container):
     __fields__ = "queries", "documents", "qrels"
 
     queries: List[Query]
@@ -123,7 +124,7 @@ class Dataset:
 
     def __init__(self, **kwargs):
         super().__init__(
-            **{'queries': [], 'documents': [], 'qrels': [], **kwargs}
+            **{"queries": [], "documents": [], "qrels": [], **kwargs}
         )
 
     def iter_docs(self) -> Iterable[Document]:
@@ -168,12 +169,7 @@ def _read_paths(
         with open(path) as f:
             for line in f:
                 elem = json.loads(line.strip())
-                parsed = {}
-                for fld in cls.fields():
-                    if (value := elem.get(fld, None)) is None:
-                        raise ValueError(f"No {fld} field in documents")
-                    parsed[fld] = value
-                yield cls(**parsed)
+                yield cls(**elem)
 
 
 @dataset_registry.add("from_files")

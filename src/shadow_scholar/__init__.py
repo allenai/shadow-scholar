@@ -1,5 +1,10 @@
-from .app.pdod.entrypoint import run_pdod
+from .app.pdod.main import run_pdod, run_pdod_web_ui
 from .app.qa.data import process_collection
 from .collections.athena import get_s2ag_abstracts
 
-__all__ = ["get_s2ag_abstracts", "process_collection", "run_pdod"]
+__all__ = [
+    "get_s2ag_abstracts",
+    "process_collection",
+    "run_pdod",
+    "run_pdod_web_ui",
+]

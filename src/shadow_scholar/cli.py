@@ -67,7 +67,7 @@ class Argument:
             **({"nargs": nargs} if nargs is not M else {}),
             **({"const": const} if const is not M else {}),
             **({"default": default} if default is not M else {}),
-            **({"type": type} if type is not M else {}),
+            **({"type": type} if type is not _M else {}),
             **({"choices": choices} if choices is not M else {}),
             **({"required": required} if required is not M else {}),
             **({"help": help} if help is not M else {}),

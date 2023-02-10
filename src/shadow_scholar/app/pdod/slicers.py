@@ -32,6 +32,7 @@ class BaseSlicer(ABC):
             return [doc for doc in seq_or_doc for doc in self.slice_one(doc)]
 
 
+@slicer_registry.add("sent")
 class SentenceSlicer(BaseSlicer):
     """A slicer that slices a document into a single sentence."""
 
@@ -70,6 +71,7 @@ class SentenceSlicer(BaseSlicer):
             return self.slice_text(doc)
 
 
+@slicer_registry.add("block")
 class BlockSlicer(SentenceSlicer):
     def __init__(
         self,
