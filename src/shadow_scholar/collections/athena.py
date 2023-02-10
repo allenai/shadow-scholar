@@ -1,22 +1,23 @@
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Union, cast
+from string import Formatter
+from typing import Any, Dict, Optional, Union, cast
 
-from shadow_scholar.cli import cli, Argument, safe_import
+from shadow_scholar.cli import Argument, cli, safe_import
 
 with safe_import():
+    import boto3
+    from botocore.client import BaseClient
     from smashed.utils.io_utils import (
         MultiPath,
         copy_directory,
         remove_directory,
         remove_file,
     )
-    from botocore.client import BaseClient
-    import boto3
 
 
-ATHENA_SQL_DIR = Path(__file__).parent / "athena_sql"
+QUERIES_DIR = Path(__file__).parent / "queries"
 
 
 def wait_for_athena_query(
@@ -24,7 +25,7 @@ def wait_for_athena_query(
 ) -> bool:
     state = "RUNNING"
 
-    print(f"Waiting for {execution_id} to complete..", end='', flush=True)
+    print(f"Waiting for {execution_id} to complete..", end="", flush=True)
 
     while max_wait > 0 and state in ["RUNNING", "QUEUED"]:
         response = client.get_query_execution(QueryExecutionId=execution_id)
@@ -42,39 +43,71 @@ def wait_for_athena_query(
                 raise RuntimeError(f"Query {execution_id} failed: {err}")
 
         time.sleep(timeout)
-        print(".", end='', flush=True)
+        print(".", end="", flush=True)
         max_wait -= timeout
 
     raise RuntimeError(f"Query {execution_id} timed out")
 
 
+@cli(
+    name="collections.run_athena_query",
+    arguments=[
+        Argument(
+            "-q",
+            "--query-path",
+            type=str,
+            required=True,
+            help="Path to the sql query file to run.",
+        ),
+        Argument(
+            "--s3-staging",
+            default="s3://ai2-s2-research/temp/",
+            type=str,
+            help=(
+                "S3 bucket for output of Athena query; to be removed after"
+                " execution if -o/--output-location is a local directory."
+            ),
+        ),
+        Argument(
+            "--output-name",
+            default=datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
+            type=str,
+            help="Name of output directory; by default, current date/time",
+        ),
+    ],
+    requirements=["boto3", "botocore", "smashed[remote]"],
+)
 def run_athena_query_and_get_result(
-    query_string: str,
-    s3_staging: Union[str, MultiPath],
-    output_location: Union[str, MultiPath],
+    query_path: str,
+    s3_staging: Union[str, "MultiPath"],
+    output_location: Union[str, "MultiPath"],
     output_name: str,
+    template_args: Optional[Dict[str, Any]] = None,
 ):
     s3_staging = MultiPath.parse(s3_staging)
     output_location = MultiPath.parse(output_location)
     s3_staging = output_location if output_location.is_s3 else s3_staging
     s3_output_location = s3_staging / output_name
+    template_args = template_args or {}
 
-    query_string = f"""
-        UNLOAD(
-            {query_string.rstrip(';')}
-        )
-        TO '{s3_output_location}'
-        WITH (
-            format='JSON',
-            compression='GZIP'
-        );
-    """
+    with open(query_path) as f:
+        query_string = f.read()
+
+    formatting_keys = [
+        t[1] for t in Formatter().parse(query_string) if t[1] is not None
+    ]
+    formatting_data = {
+        **{k: "" for k in formatting_keys},
+        **(template_args or {}),
+    }
+
+    formatted_query_string = query_string.format(**formatting_data)
 
     athena_client = cast(BaseClient, boto3.client("athena"))
     s3_client = cast(BaseClient, boto3.client("s3"))
 
     response = athena_client.start_query_execution(
-        QueryString=query_string,
+        QueryString=formatted_query_string,
         ResultConfiguration=dict(OutputLocation=s3_staging.as_str),
     )
     execution_id = response["QueryExecutionId"]
@@ -95,78 +128,45 @@ def run_athena_query_and_get_result(
 
 
 @cli(
-    name="collections.s2orc",
+    name="collections.s2ag.abstracts",
     arguments=[
         Argument(
-            '-d', '--database',
-            default='s2orc_papers',
-            type=str,
-            help='Athena database name for S2ORC'
-        ),
-        Argument(
-            '-r', '--release',
-            default='latest',
-            type=str,
-            help='S2ORC release name'
-        ),
-        Argument(
-            '-l', '--limit',
+            "-l",
+            "--limit",
             default=10,
             type=int,
-            help='Limit number of results; if 0, no limit'
+            help="Limit number of results; if 0, no limit",
         ),
         Argument(
-            '-o', '--output-location',
-            required=True,
+            "-a",
+            "--abstract",
+            default=None,
             type=str,
-            help='Location for results; can be an S3 bucket or a local dir'
+            help="text to search in the abstract",
         ),
-        Argument(
-            '--s3-staging',
-            default='s3://ai2-s2-research/temp/',
-            type=str,
-            help=(
-                'S3 bucket for output of Athena query; to be removed after'
-                ' execution if -o/--output-location is a local directory.'
-            )
-        ),
-        Argument(
-            '--output-name',
-            default=datetime.now().strftime('%Y-%m-%d-%H-%M-%S'),
-            type=str,
-            help=(
-                'Name of output directory; by default, '
-                'it is the current date/time'
-            )
-        )
+        *run_athena_query_and_get_result.args,
     ],
-    requirements=[
-        'boto3>=1.20.0',
-        'botocore>=1.23.0',
-        'smashed[remote]',
-    ]
+    requirements=run_athena_query_and_get_result.reqs,
 )
-def get_s2orc(
+def get_s2ag_abstracts(
     database: str,
     release: str,
     limit: int,
     output_location: str,
     s3_staging: str,
     output_name: str,
+    query_path: str = str(QUERIES_DIR / "s2ag_abstracts.sql"),
 ):
     """Get a sample of the S2ORC dataset from Athena."""
 
-    limit_clause = f"LIMIT {limit}" if limit > 0 else ""
-
-    query_string = f"""
-        SELECT *
-        FROM {database}.{release}
-        {limit_clause}
-    """
+    template_args = {
+        "limit_clause": f"LIMIT {limit}" if limit > 0 else "",
+    }
 
     run_athena_query_and_get_result(
-        query_string=query_string,
+        query_path=query_path,
         s3_staging=s3_staging,
         output_location=output_location,
         output_name=output_name,
+        template_args=template_args,
     )

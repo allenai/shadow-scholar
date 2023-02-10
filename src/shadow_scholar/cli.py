@@ -1,13 +1,24 @@
+import inspect
+import json
 from argparse import ArgumentParser
 from contextlib import contextmanager
-import inspect
-import sys
-from typing import Any, Callable, Dict, Type, TypeVar, Optional, List, Tuple
-
-from typing_extensions import ParamSpec, Concatenate
+from functools import partial
+from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 from necessary import necessary
-
+from typing_extensions import ParamSpec
 
 # parameter spec
 PS = ParamSpec("PS")
@@ -19,7 +30,15 @@ RT = TypeVar("RT")
 T = TypeVar("T")
 
 # sentinel value
-MISSING = object()
+M = object()
+
+
+# sentinel value for missing arguments
+class _M:
+    ...  # noqa: E701
+
+
+M = _M()  # noqa: E305
 
 
 class Argument:
@@ -31,54 +50,144 @@ class Argument:
     def __init__(
         self,
         *name_or_flags: str,
-        action: Optional[str] = MISSING,            # type: ignore
-        nargs: Optional[str] = MISSING,             # type: ignore
-        const: Optional[str] = MISSING,             # type: ignore
-        default: Optional[T] = MISSING,             # type: ignore
-        type: Optional[Type[T]] = MISSING,          # type: ignore
-        choices: Optional[List[str]] = MISSING,     # type: ignore
-        required: Optional[bool] = MISSING,         # type: ignore
-        help: Optional[str] = MISSING,              # type: ignore
-        metavar: Optional[str] = MISSING,           # type: ignore
-        dest: Optional[str] = MISSING,              # type: ignore
+        action: Optional[str] = M,  # type: ignore
+        nargs: Optional[str] = M,  # type: ignore
+        const: Optional[str] = M,  # type: ignore
+        default: Optional[T] = M,  # type: ignore
+        type: Union[Type[T], Callable[..., T], None] = _M,  # type: ignore
+        choices: Optional[List[str]] = M,  # type: ignore
+        required: Optional[bool] = M,  # type: ignore
+        help: Optional[str] = M,  # type: ignore
+        metavar: Optional[str] = M,  # type: ignore
+        dest: Optional[str] = M,  # type: ignore
     ):
-
         self.args = name_or_flags
         self.kwargs = {
-            **({'action': action} if action is not MISSING else {}),
-            **({'nargs': nargs} if nargs is not MISSING else {}),
-            **({'const': const} if const is not MISSING else {}),
-            **({'default': default} if default is not MISSING else {}),
-            **({'type': type} if type is not MISSING else {}),
-            **({'choices': choices} if choices is not MISSING else {}),
-            **({'required': required} if required is not MISSING else {}),
-            **({'help': help} if help is not MISSING else {}),
-            **({'metavar': metavar} if metavar is not MISSING else {}),
-            **({'dest': dest} if dest is not MISSING else {}),
+            **({"action": action} if action is not M else {}),
+            **({"nargs": nargs} if nargs is not M else {}),
+            **({"const": const} if const is not M else {}),
+            **({"default": default} if default is not M else {}),
+            **({"type": type} if type is not _M else {}),
+            **({"choices": choices} if choices is not M else {}),
+            **({"required": required} if required is not M else {}),
+            **({"help": help} if help is not M else {}),
+            **({"metavar": metavar} if metavar is not M else {}),
+            **({"dest": dest} if dest is not M else {}),
         }
+
+
+class EntryPoint(Generic[PS, RT]):
+    def __init__(
+        self,
+        name: str,
+        func: Callable[PS, RT],
+        args: List[Argument],
+        reqs: List[str],
+    ):
+        self.name = name
+        self.func = func
+        self.args = args
+        self.reqs = reqs
+
+        # check that all requirements are met (error raised later if not)
+        self.missing_reqs = [r for r in reqs if not necessary(r, soft=True)]
+
+    def __call__(self, *args: PS.args, **kwargs: PS.kwargs) -> RT:
+        """Run the function."""
+
+        if self.missing_reqs:
+            raise ModuleNotFoundError(
+                f"Missing requirements: {', '.join(self.missing_reqs)}"
+            )
+        return self.func(*args, **kwargs)
+
+    def cli(self, args: Optional[List[str]] = None) -> RT:
+        """Run the function from the command line."""
+        ap = ArgumentParser(f"shadow-scholar {self.name}")
+        for arg in self.args:
+            ap.add_argument(*arg.args, **arg.kwargs)
+        opts, *_ = ap.parse_known_args(args)
+
+        parsed_args = inspect.signature(self.func).bind(**vars(opts)).arguments
+        return self.func(**parsed_args)  # pyright: ignore
+
+    @classmethod
+    def decorate(
+        cls,
+        func: Callable[PS, RT],
+        name: Optional[str] = None,
+        arguments: Optional[List[Argument]] = None,
+        requirements: Optional[List[str]] = None,
+    ) -> "EntryPoint[PS, RT]":
+        """Decorator designed to add function to a registry alongside
+        all its arguments and requirements.
+
+        We add the requirement for future parsing, rather than
+        building a ArgumentParser here, for two reasons:
+        1. We want to be able for all decorated functions to be able to
+            use overlapping arguments, and
+        2. Creating a single parser here might lead to a lot of unintended
+            side effects.
+
+        Args:
+            func (Callable): The function to be decorated.
+            name (str, optional): Name to use for the function when it is
+                called from the command line. If none is provided, the
+                function name is used. Defaults to None.
+            arguments (List[Argument], optional): A list of Argument objects
+                to be passed to the ArgumentParser. The available options
+                are the same as those for argparse.ArgumentParser.add_argument.
+                Defaults to None.
+            requirements (Optional[List[str]], optional): A list of required
+                packages for the function to run. Defaults to None.
+        """
+
+        name = name or func.__name__
+        arguments = arguments or []
+        func_requirements = requirements or []
+
+        # create the entry point by wrapping the function
+        entry_point = cls(
+            name=name,
+            func=func,
+            args=arguments,
+            reqs=func_requirements,
+        )
+
+        # add the function to the registry
+        Registry().add(entry_point)
+
+        return entry_point
 
 
 class Registry:
     """A registry to hold all the functions decorated with @cli."""
 
+    __instance__: "Registry"
+    _registry: Dict[str, "EntryPoint"]
+
     def __new__(cls):
         """Singleton pattern for the registry."""
         if not hasattr(cls, "__instance__"):
             cls.__instance__ = super(Registry, cls).__new__(cls)
-            cls.__instance__.__init__()
         return cls.__instance__
 
     def __init__(self) -> None:
-        self._callable_registry: Dict[str, Callable] = {}
-        self._requirements_registry: Dict[str, List[str]] = {}
+        if not hasattr(self, "_registry"):
+            self._registry = {}
+
+    def add(self, entry_point: EntryPoint) -> None:
+        """Add an entry point to the registry."""
+        if entry_point.name in self._registry:
+            raise KeyError(f"Func {entry_point.name} already in the registry")
+        self._registry[entry_point.name] = entry_point
 
     def cli(
         self,
         name: Optional[str] = None,
         arguments: Optional[List[Argument]] = None,
         requirements: Optional[List[str]] = None,
-        entrypoint: bool = True,
-    ):
+    ) -> Callable[[Callable[PS, RT]], "EntryPoint[PS, RT]"]:
         """A decorator to add a function to the registry.
 
         Args:
@@ -90,71 +199,25 @@ class Registry:
                 are the same as those for argparse.ArgumentParser.add_argument.
                 Defaults to None.
             requirements (Optional[List[str]], optional): A list of required
-            entrypoint (bool, optional): _description_. Defaults to True.
         """
-
-        def decorator(
-            func: Callable[Concatenate[PS], RT]
-        ) -> Callable[Concatenate[PS], RT]:
-            """Decorator designed to add function to a registry alongside
-            all its arguments and requirements.
-
-            We add the requirement for future parsing, rather than
-            building a ArgumentParser here, for two reasons:
-            1. We want to be able for all decorated functions to be able to
-               use overlapping arguments, and
-            2. Creating a single parser here might lead to a lot of unintended
-               side effects.
-            """
-
-            func_arg_name = name or func.__name__
-            func_arguments = arguments or []
-            func_requirements = requirements or []
-            is_entrypoint = entrypoint
-
-            # check that all requirements are met
-            missing_requirements = [
-                req for req in func_requirements
-                if not necessary(req, soft=True)
-            ]
-
-            def wrapper(*args: PS.args, **kwargs: PS.kwargs) -> RT:
-                ap = ArgumentParser(f'shadow-scholar {func_arg_name}')
-                for arg in func_arguments:
-                    ap.add_argument(*arg.args, **arg.kwargs)
-
-                if missing_requirements:
-                    print('The following requirements are missing:', end=' ')
-                    print(' '.join(missing_requirements))
-                    sys.exit(1)
-
-                opts, *_ = ap.parse_known_args()
-
-                parsed_args = inspect.signature(func)\
-                    .bind(*args, **{**vars(opts), **kwargs}).arguments
-
-                return func(**parsed_args)      # pyright: ignore
-
-            if is_entrypoint and func_arg_name in self._callable_registry:
-                raise ValueError(
-                    f'Entry point {func_arg_name} already exists'
-                )
-            elif is_entrypoint:
-                self._callable_registry[func_arg_name] = wrapper
-            return func
-
-        return decorator
+        decorated = partial(
+            EntryPoint.decorate,  # type: ignore
+            name=name,
+            arguments=arguments,
+            requirements=requirements,
+        )
+        return decorated  # type: ignore
 
     def run(self):
         """Creates a click command group for all registered functions."""
         parser = ArgumentParser("shadow-scholar")
-        parser.add_argument('entrypoint', choices=self._callable_registry.keys())
-        opts, _ = parser.parse_known_args()
+        parser.add_argument("entrypoint", choices=self._registry.keys())
+        opts, rest = parser.parse_known_args()
 
-        if opts.entrypoint in self._callable_registry:
-            return self._callable_registry[opts.entrypoint]()
+        if opts.entrypoint in self._registry:
+            return self._registry[opts.entrypoint].cli(rest)
 
-        raise ValueError(f'No entrypoint found for {opts.entrypoint}')
+        raise ValueError(f"No entrypoint found for {opts.entrypoint}")
 
 
 @contextmanager
@@ -170,12 +233,14 @@ def safe_import():
         pass
 
 
+def load_kwargs(path_or_json: str) -> Dict[str, Any]:
+    if Path(path_or_json).exists():
+        with open(path_or_json) as f:
+            path_or_json = f.read()
+    return json.loads(path_or_json)
+
+
 run = Registry().run
 cli = Registry().cli
 
-__all__ = [
-    'run',
-    'cli',
-    'Argument',
-    'safe_import'
-]
+__all__ = ["run", "cli", "Argument", "safe_import", "load_kwargs"]

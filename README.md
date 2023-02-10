@@ -10,7 +10,7 @@ To install, simply clone the repository and install with pip:
 ```bash
 git clone git@github.com:allenai/shadow-scholar.git
 cd shadow-scholar
-pip install -e .
+pip install .
 ```
 
 ## Available Scripts
