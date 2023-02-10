@@ -193,7 +193,7 @@ class PoolingModes(Enum):
 
 
 @ranker_registry.add("dense")
-class SentenceTransformerRanker(BaseRanker[torch.Tensor]):
+class SentenceTransformerRanker(BaseRanker["torch.Tensor"]):
     model: SentenceTransformer
 
     def __init__(
@@ -229,7 +229,7 @@ class SentenceTransformerRanker(BaseRanker[torch.Tensor]):
 
     def _encode(  # type: ignore[override]
         self, batch: Sequence[Document], norm: bool
-    ) -> torch.Tensor:
+    ) -> "torch.Tensor":
         encoding = self.model.encode(
             sentences=[doc.text for doc in batch],
             convert_to_tensor=True,

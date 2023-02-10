@@ -30,7 +30,7 @@ jobs:
           - name: Style
             run: |
               isort --check src/ tests/
-              black --check src/ tests/
+              black -l 79 --check src/ tests/
 
           - name: Lint
             run: |
