@@ -215,18 +215,7 @@ class Registry:
         parser = ArgumentParser("shadow-scholar")
         parser.add_argument("entrypoint", choices=self._registry.keys())
 
-        # stop at the first argument that does not start with a dash
-        # the +2 is needed because sys.argv[0] is the script name (that
-        # accounts for the first +1) and slicing is exclusive (that accounts
-        # for the second +1).
-        try:
-            i = [arg.startswith('-') for arg in sys.argv[1:]].index(False)
-        except ValueError:
-            i = len(sys.argv)
-        args = sys.argv[1:i]
-
-        opts, rest = parser.parse_known_args(args)
-        rest += sys.argv[i:]
+        opts, rest = parser.parse_known_args()
 
         if opts.entrypoint in self._registry:
             return self._registry[opts.entrypoint].cli(rest)
