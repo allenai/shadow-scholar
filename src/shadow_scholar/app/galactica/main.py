@@ -1,6 +1,6 @@
 from contextlib import contextmanager
-from typing import Literal, Tuple, Union
-
+from typing import Tuple
+import logging
 
 from shadow_scholar.cli import safe_import, cli, Argument
 
@@ -8,6 +8,9 @@ with safe_import():
     import torch
     import gradio as gr
     from transformers import AutoTokenizer, OPTForCausalLM
+
+
+LOGGING = logging.getLogger(__name__)
 
 
 class _gl_model:
@@ -37,11 +40,13 @@ class _gl_model:
 
         self.backbone, self.dtype = self.get_model_spec(model_name)
 
+        print(f"Loading model {self.backbone} on {self.device}...")
+
         self.tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path=self.backbone
         )
         self.model = OPTForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=self.backbone, device_map="auto"
+            pretrained_model_name_or_path=self.backbone, #device_map="auto"
         ).to(self.device).eval()    # pyright: ignore
 
         # self.model = AutoModelForCausalLM.from_pretrained(
@@ -85,7 +90,7 @@ class _gl_model:
             help='Pretrained model or path to local checkpoint'
         ),
     ],
-    requirements=['gradio', 'transformers', 'torch']
+    requirements=['gradio', 'transformers', 'torch', 'accelerate']
 )
 def run_galactica_demo(model_name: str):
     gl_model = _gl_model(model_name=model_name)

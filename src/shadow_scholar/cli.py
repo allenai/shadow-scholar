@@ -4,7 +4,6 @@ from argparse import ArgumentParser
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-import sys
 from typing import (
     Any,
     Callable,
@@ -214,13 +213,27 @@ class Registry:
         """Creates a click command group for all registered functions."""
         parser = ArgumentParser("shadow-scholar")
         parser.add_argument("entrypoint", choices=self._registry.keys())
+        parser.add_argument(
+            '-l', '--list-requirements',
+            action='store_true',
+            help='List the requirements for all entrypoints.'
+        )
 
         opts, rest = parser.parse_known_args()
 
         if opts.entrypoint in self._registry:
-            return self._registry[opts.entrypoint].cli(rest)
+            entrypoint = self._registry[opts.entrypoint]
+        else:
+            raise ValueError(f"No entrypoint found for {opts.entrypoint}")
 
-        raise ValueError(f"No entrypoint found for {opts.entrypoint}")
+        if opts.list_requirements:
+            print(
+                f"Requirements for {entrypoint.name}: "
+                f"\t{' '.join(entrypoint.reqs)}"
+            )
+            return
+        else:
+            entrypoint.cli(rest)
 
 
 @contextmanager
