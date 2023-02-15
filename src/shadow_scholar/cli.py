@@ -229,7 +229,7 @@ class Registry:
         if opts.list_requirements:
             print(
                 f"Requirements for {entrypoint.name}: "
-                f"\t{' '.join(entrypoint.reqs)}"
+                f"{' '.join(entrypoint.reqs)}"
             )
             return
         else:
