@@ -222,4 +222,5 @@ def run_galactica_demo(
             with gr.Row():
                 gr.Markdown(INSTRUCTIONS, elem_id="instructions")
 
+    demo.queue(concurrency_count=1)
     demo.launch(server_name=server_name, server_port=server_port)
