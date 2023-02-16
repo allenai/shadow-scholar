@@ -1,4 +1,8 @@
-from typing import Literal
+from datetime import datetime
+import inspect
+import json
+from pathlib import Path
+from typing import Literal, Optional
 
 from shadow_scholar.cli import Argument, cli, safe_import
 
@@ -7,6 +11,42 @@ from .galai_model import Model
 
 with safe_import():
     import gradio as gr
+
+
+class ModelWrapper:
+    def __init__(
+        self,
+        name: str,
+        precision: Literal["full", "mixed"] = "full",
+        tensor_parallel: bool = False,
+        logdir: Optional[str] = None,
+    ):
+        self.model = Model(
+            name=name,
+            precision=precision,
+            tensor_parallel=tensor_parallel
+        )
+        self.start_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.logdir = Path(logdir) if logdir else None
+        self.signature = inspect.signature(self.model.generate)
+
+    def log(self, arguments, output):
+        if self.logdir is None:
+            return
+
+        self.logdir.mkdir(parents=True, exist_ok=True)
+
+        fn = f'{self.model.name.replace("/", "_")}_{self.start_time}.jsonl'
+        with open(self.logdir / fn, "a") as f:
+            f.write(
+                json.dumps({'input': arguments, 'output': output}) + '\n'
+            )
+
+    def __call__(self, *args, **kwargs):
+        arguments = self.signature.bind(*args, **kwargs).arguments
+        output = self.model.generate(**arguments)
+        self.log(arguments, output)
+        return output
 
 
 @cli(
@@ -44,8 +84,20 @@ with safe_import():
             action="store_true",
             help="Parallelize the model across multiple GPUs.",
         ),
+        Argument(
+            "-l",
+            "--logdir",
+            default=None,
+            help="Directory to log inputs and outputs to",
+        )
     ],
-    requirements=["gradio", "transformers", "torch", "accelerate", "psutil"],
+    requirements=[
+        "gradio",
+        "transformers",
+        "torch",
+        "accelerate",
+        "psutil",
+    ],
 )
 def run_galactica_demo(
     model_name: str,
@@ -53,9 +105,13 @@ def run_galactica_demo(
     server_name: str,
     precision: Literal["full", "mixed"],
     parallelize: bool = False,
+    logdir: Optional[str] = None,
 ):
-    gl_model = Model(
-        name=model_name, precision=precision, tensor_parallel=parallelize
+    gl_model = ModelWrapper(
+        name=model_name,
+        precision=precision,
+        tensor_parallel=parallelize,
+        logdir=logdir,
     )
 
     with gr.Blocks(css=CSS) as demo:
@@ -68,7 +124,7 @@ def run_galactica_demo(
                     + "Available models:\n"
                     + "\n".join(
                         f" - {k.capitalize()}: `{n}`"
-                        for k, (n, _) in gl_model.variants.items()
+                        for k, (n, _) in gl_model.model.variants.items()
                     )
                 )
             with gr.Row():
@@ -148,7 +204,7 @@ def run_galactica_demo(
                     )
 
             submit_button.click(
-                fn=gl_model.generate,
+                fn=gl_model,
                 inputs=[
                     input_text,
                     max_new_tokens,

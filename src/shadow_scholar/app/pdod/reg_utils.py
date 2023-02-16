@@ -24,7 +24,7 @@ class CallableRegistry(Generic[T]):
         self.callables = {}
 
     @overload
-    def _decorator(  # pyright: ignore
+    def _decorator(  # type: ignore
         self, func: Callable[..., T], func_name: Optional[str] = None
     ) -> Callable[..., T]:
         ...
