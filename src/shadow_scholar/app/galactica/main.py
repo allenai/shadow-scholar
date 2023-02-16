@@ -1,13 +1,11 @@
 from contextlib import contextmanager
-from functools import partial
 import re
 from typing import Iterator, List, Literal, Tuple, Union, Dict, Optional
 import logging
 from ast import literal_eval
 
-from torch import device
-
 from shadow_scholar.cli import safe_import, cli, Argument
+from .constants import INSTRUCTIONS, CSS
 
 with safe_import():
     import torch
@@ -120,6 +118,7 @@ class _gl_model:
             pad_token_id=1,
             padding='longest',
             padding_side='left',
+            truncation_side='left',
             return_token_type_ids=False,
         )
 
@@ -131,7 +130,7 @@ class _gl_model:
             device_map = infer_auto_device_map(
                 empty_model,
                 max_memory={
-                    gid: f'{mem * .95:.0f}MB'
+                    gid: f'{mem * .7:.0f}MB'
                     for gid, mem in _gpu_mem().items()
                 },
                 no_split_module_classes=[
@@ -166,21 +165,6 @@ class _gl_model:
                 torch_dtype=self.dtype
             ).eval()    # pyright: ignore
 
-            # import ipdb; ipdb.set_trace()
-
-            # current_device, prev_param = 0, ''
-            # for param, device in device_map.items():
-            #     if device == current_device:
-            #         prev_param = param
-            #         continue
-
-            #     submodule = get_submodule(self.model, prev_param)
-            #     submodule.register_forward_hook(
-            #         partial(move_tensors, device=f'cuda:{device}')
-            #     )
-            #     current_device = device
-            #     prev_param = param
-
         else:
             self.model = OPTForCausalLM.from_pretrained(
                 pretrained_model_name_or_path=model_path or self.backbone,
@@ -203,24 +187,35 @@ class _gl_model:
     def __call__(
         self,
         text: str,
-        config: Union[dict, List[Tuple[str, str]]],
+        tokenize_config: Union[dict, List[Tuple[str, str]], None] = None,
+        generate_config: Union[dict, List[Tuple[str, str]], None] = None,
         trim_input_prompt_from_generated_text: bool = False,
     ) -> str:
 
-        if not isinstance(config, dict):
-            config = {
-                k: literal_eval(v) for k, v in config
+        if not isinstance(tokenize_config, dict):
+            tokenize_config = {
+                k: literal_eval(v) for k, v in (tokenize_config or [])
                 if k.strip() != '' and v.strip() != ''
             }
 
-        batch = self.tokenizer(text, return_tensors="pt")
+        if not isinstance(generate_config, dict):
+            generate_config = {
+                k: literal_eval(v) for k, v in (generate_config or [])
+                if k.strip() != '' and v.strip() != ''
+            }
+
+        batch = self.tokenizer(
+            text,
+            return_tensors="pt",
+            **tokenize_config
+        )
         casted_batch = batch.to(self.device)
 
         with self.autocast(), torch.no_grad():
             outputs = self.model.generate(
                 input_ids=casted_batch.input_ids,
                 attention_mask=casted_batch.attention_mask,
-                **config,
+                **generate_config,
             )
 
         decoded = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -286,48 +281,79 @@ def run_galactica_demo(
         use_accelerate=use_accelerate,
     )
 
-    inputs = [
-        gr.Textbox(lines=5, label="Input", placeholder="Prompt text"),
-        gr.inputs.Dataframe(
-            label=(
-                'Parameters for `GenerationMixin.generate()`; '
-                'values should be python literals'
-            ),
-            headers=['Parameter', 'Value'],
-            type='array',
-            col_count=2,
-            row_count=1,
-            default=[
-                ['max_length', '512'],
-                ['do_sample', 'True'],
-                ['num_beams', '5'],
-                ['temperature', '1.0'],
-                ['top_k', '50'],
-            ]
-        ),
-        gr.Checkbox(
-            label="Hide input?",
-            bool=False
-        )
-    ]
-    outputs = [gr.Markdown(label="Output")]
+    with gr.Blocks(css=CSS) as demo:
+        with gr.Row():
+            gr.Markdown(f"# Galactica {model_name} Demo")
+        with gr.Tab("Demo"):
+            with gr.Row():
+                gr.Markdown(
+                    f"**Currently loaded**: {gl_model}\n" +
+                    "Available models:\n" +
+                    "\n".join(
+                        f" - {k}: `{n}`"
+                        for k, (n, _) in gl_model.variants.items()
+                    )
+                )
+            with gr.Row():
+                with gr.Column():
+                    input_text = gr.Textbox(
+                        lines=5, label="Input", placeholder="Prompt text"
+                    )
+                    submit_button = gr.Button(label="Generate")
+                    tokenizer_options = gr.inputs.Dataframe(
+                        label=(
+                            "Parameters for `Tokenizer.batch_encode()`; "
+                            "values should be Python literals."
+                        ),
+                        headers=['Parameter', 'Value'],
+                        type='array',
+                        col_count=2,
+                        default=[
+                            ['max_length', '512'],
+                            ['truncation', 'True'],
+                            ['pad_to_multiple_of', '32'],
+                        ]
+                    )
+                    generation_options = gr.inputs.Dataframe(
+                        label=(
+                            'Parameters for `GenerationMixin.generate()`; '
+                            'values should be Python literals.'
+                        ),
+                        headers=['Parameter', 'Value'],
+                        type='array',
+                        col_count=2,
+                        default=[
+                            ['max_new_tokens', '128'],
+                            ['do_sample', 'True'],
+                            ['num_beams', '5'],
+                            ['top_k', '25'],
+                            ['temperature', '.7'],
+                            ['top_p', '.9'],
+                            ['no_repeat_ngram_size', '10'],
+                            ['early_stopping', 'True']
+                        ]
+                    )
+                    hide_prompt = gr.Checkbox(
+                        label="Hide input prompt in generation?",
+                        bool=False
+                    )
+                with gr.Column():
+                    output_text = gr.Textbox(
+                        lines=5, label="Output", placeholder="Generated text"
+                    )
 
-    description = (
-        "This is a demo of the Galactica model.\n\n"+
-        f"Currently loaded: {gl_model}\n" +
-        "Available models:\n" +
-        "\n".join(
-            f" - {k}: `{n}`"
-            for k, (n, t) in gl_model.variants.items()
-        )
-    )
-
-    demo = gr.Interface(
-        title="Galactica Demo",
-        description=description,
-        fn=gl_model,
-        inputs=inputs,
-        outputs=outputs     # pyright: ignore
-    )
+            submit_button.click(
+                fn=gl_model,
+                inputs=[
+                    input_text,
+                    tokenizer_options,
+                    generation_options,
+                    hide_prompt
+                ],
+                outputs=[output_text]
+            )
+        with gr.Tab("Instructions"):
+            with gr.Row():
+                gr.Markdown(INSTRUCTIONS, elem_id="instructions")
 
     demo.launch(server_name=server_name, server_port=server_port)

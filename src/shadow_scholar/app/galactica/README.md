@@ -1,6 +1,6 @@
 # Galactica Demo
 
-![](example.png)
+![A screenshot of the Demo UI](example.png)
 
 The following application provides a simple interface for the [Galactica][1]
 model. In detail, it runs loads the model from the HuggingFace model hub and
