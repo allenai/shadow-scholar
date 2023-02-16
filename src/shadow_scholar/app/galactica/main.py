@@ -42,9 +42,6 @@ class ModelWrapper:
         arguments = self.signature.bind(*args, **kwargs).arguments
         output = self.model.generate(**arguments)
         self.log(arguments, output)
-
-        if isinstance(output, list):
-            output = f"```\n{json.dumps(output, indent=2)}\n```"
         return output
 
 
