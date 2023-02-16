@@ -1,6 +1,6 @@
-from ast import literal_eval
 import inspect
 import json
+from ast import literal_eval
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
@@ -11,6 +11,7 @@ from .constants import CSS, INSTRUCTIONS
 
 with safe_import():
     import gradio as gr
+
     from .galai_model import Model
 
 
@@ -46,9 +47,10 @@ class ModelWrapper:
         arguments = self.signature.bind(*args, **kwargs).arguments
 
         if isinstance(opt := arguments.pop("extra_options", None), list):
-            arguments['extra_options'] = {
+            arguments["extra_options"] = {
                 # evaluate strings as python literals
-                k: literal_eval(v) for k, v in opt
+                k: literal_eval(v)
+                for k, v in opt
                 # no empty strings
                 if k.strip() and v.strip()
             }
@@ -231,7 +233,7 @@ def run_galactica_demo(
                     num_beams,
                     num_return_sequences,
                     return_full_text,
-                    extra_options
+                    extra_options,
                 ],
                 outputs=[output_text],
             )
