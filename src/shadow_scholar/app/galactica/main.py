@@ -118,11 +118,12 @@ class ModelWrapper:
             help="Directory to log inputs and outputs to",
         ),
         Argument(
-            '-s', '--leftover-space',
+            "-s",
+            "--leftover-space",
             default=0.3,
             type=float,
-            help="the amount of extra space to leave on the gpu during"
-        )
+            help="the amount of extra space to leave on the gpu during",
+        ),
     ],
     requirements=[
         "gradio",
@@ -177,7 +178,7 @@ def run_galactica_demo(
                         ),
                     )
                     top_p = gr.Textbox(
-                        value='',
+                        value="",
                         label=(
                             "top_p: if set to float < 1, only the "
                             "smallest set of most probable tokens with "
@@ -186,14 +187,14 @@ def run_galactica_demo(
                         ),
                     )
                     top_k = gr.Textbox(
-                        value='',
+                        value="",
                         label=(
                             "top_k: size of the candidate set that is "
                             "used to re-rank for contrastive search"
                         ),
                     )
                     penalty_alpha = gr.Textbox(
-                        value='',
+                        value="",
                         label=(
                             "penalty_alpha: degeneration penalty for "
                             "contrastive search"
