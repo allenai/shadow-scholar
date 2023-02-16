@@ -115,12 +115,27 @@ class _gl_model:
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path=self.backbone,
-            pad_token_id=1,
-            padding='longest',
-            padding_side='left',
-            truncation_side='left',
-            return_token_type_ids=False,
         )
+
+        # from the galactica repo: https://github.com/paperswithcode/galai/blob/1a1e4486fd38c85c6b66b3c0b31ce24b0afd7613/galai/model.py#L154  # noqa: E501
+
+        # setup padding
+        self.tokenizer.pad_token_id = 1
+        self.tokenizer.pad_token = "<pad>"
+        self.tokenizer.padding_side = "left"
+
+        # setup truncation
+        self.tokenizer.truncation_side = "left"
+
+        # setup special tokens
+        self.tokenizer.bos_token_id = 0
+        self.tokenizer.bos_token = "<s>"
+
+        self.tokenizer.eos_token_id = 2
+        self.tokenizer.eos_token = "</s>"
+
+        self.tokenizer.unk_token = "<unk>"
+        self.tokenizer.unk_token_id = 3
 
         if use_accelerate:
             config = OPTConfig.from_pretrained(self.backbone)
@@ -189,7 +204,6 @@ class _gl_model:
         text: str,
         tokenize_config: Union[dict, List[Tuple[str, str]], None] = None,
         generate_config: Union[dict, List[Tuple[str, str]], None] = None,
-        trim_input_prompt_from_generated_text: bool = False,
     ) -> str:
 
         if not isinstance(tokenize_config, dict):
@@ -218,10 +232,15 @@ class _gl_model:
                 **generate_config,
             )
 
-        decoded = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-        if trim_input_prompt_from_generated_text:
-            decoded = decoded[len(text):].lstrip()
+        # following instructions from the galactica repo: https://github.com/paperswithcode/galai/blob/1a1e4486fd38c85c6b66b3c0b31ce24b0afd7613/galai/model.py#L308     # noqa: E501
+        decoded = self.tokenizer.decode(
+            outputs[0],
+            skip_special_tokens=False,
+            clean_up_tokenization_spaces=False
+        )
+        decoded = decoded.replace(
+            self.tokenizer.eos_token, ""
+        ).replace(self.tokenizer.pad_token, "")
 
         return decoded
 
@@ -330,7 +349,9 @@ def run_galactica_demo(
                             ['temperature', '.7'],
                             ['top_p', '.9'],
                             ['no_repeat_ngram_size', '10'],
-                            ['early_stopping', 'True']
+                            ['early_stopping', 'True'],
+                            ['num_beam_groups', '1'],
+                            ['diversity_penalty', '0.0'],
                         ]
                     )
                     hide_prompt = gr.Checkbox(
