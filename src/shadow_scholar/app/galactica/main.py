@@ -1,8 +1,7 @@
-from datetime import datetime
 import inspect
 import json
+from datetime import datetime
 from pathlib import Path
-from pprint import pprint
 from typing import Literal, Optional
 
 from shadow_scholar.cli import Argument, cli, safe_import
@@ -23,9 +22,7 @@ class ModelWrapper:
         logdir: Optional[str] = None,
     ):
         self.model = Model(
-            name=name,
-            precision=precision,
-            tensor_parallel=tensor_parallel
+            name=name, precision=precision, tensor_parallel=tensor_parallel
         )
         self.start_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.logdir = Path(logdir) if logdir else None
@@ -39,9 +36,7 @@ class ModelWrapper:
 
         fn = f'{self.model.name.replace("/", "_")}_{self.start_time}.jsonl'
         with open(self.logdir / fn, "a") as f:
-            f.write(
-                json.dumps({'input': arguments, 'output': output}) + '\n'
-            )
+            f.write(json.dumps({"input": arguments, "output": output}) + "\n")
 
     def __call__(self, *args, **kwargs):
         arguments = self.signature.bind(*args, **kwargs).arguments
@@ -93,7 +88,7 @@ class ModelWrapper:
             "--logdir",
             default=None,
             help="Directory to log inputs and outputs to",
-        )
+        ),
     ],
     requirements=[
         "gradio",

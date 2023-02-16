@@ -33,8 +33,8 @@ class Model:
     using the standard HuggingFace API.
     """
 
-    model: OPTForCausalLM
-    tokenizer: PreTrainedTokenizerBase
+    model: "OPTForCausalLM"
+    tokenizer: "PreTrainedTokenizerBase"
 
     def __init__(
         self,
