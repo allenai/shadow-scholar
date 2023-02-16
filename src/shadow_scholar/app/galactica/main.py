@@ -1,3 +1,4 @@
+from ast import literal_eval
 import inspect
 import json
 from datetime import datetime
@@ -7,10 +8,10 @@ from typing import Literal, Optional
 from shadow_scholar.cli import Argument, cli, safe_import
 
 from .constants import CSS, INSTRUCTIONS
-from .galai_model import Model
 
 with safe_import():
     import gradio as gr
+    from .galai_model import Model
 
 
 class ModelWrapper:
@@ -28,6 +29,9 @@ class ModelWrapper:
         self.logdir = Path(logdir) if logdir else None
         self.signature = inspect.signature(self.model.generate)
 
+    def __str__(self) -> str:
+        return str(self.model) + f" start_time={self.start_time}"
+
     def log(self, arguments, output):
         if self.logdir is None:
             return
@@ -40,6 +44,15 @@ class ModelWrapper:
 
     def __call__(self, *args, **kwargs):
         arguments = self.signature.bind(*args, **kwargs).arguments
+
+        if isinstance(opt := arguments.pop("extra_options", None), list):
+            arguments['extra_options'] = {
+                # evaluate strings as python literals
+                k: literal_eval(v) for k, v in opt
+                # no empty strings
+                if k.strip() and v.strip()
+            }
+
         output = self.model.generate(**arguments)
         self.log(arguments, output)
         return output
@@ -190,6 +203,13 @@ def run_galactica_demo(
                         ),
                         value=False,
                     )
+                    extra_options = gr.Dataframe(
+                        label="Extra options to pass to model.generate()",
+                        headers=["Parameter", "Value"],
+                        col_count=2,
+                        type="array",
+                        interactive=True,
+                    )
 
                 with gr.Column():
                     output_text = gr.Textbox(
@@ -211,6 +231,7 @@ def run_galactica_demo(
                     num_beams,
                     num_return_sequences,
                     return_full_text,
+                    extra_options
                 ],
                 outputs=[output_text],
             )

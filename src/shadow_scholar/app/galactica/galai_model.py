@@ -6,7 +6,7 @@ Adapted by @soldni
 """  # noqa: E501
 
 import warnings
-from typing import Dict, List, Literal, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from shadow_scholar.cli import safe_import
 
@@ -300,6 +300,7 @@ class Model:
         num_beams: int = 1,
         num_return_sequences: int = 1,
         return_full_text: bool = True,
+        extra_options: Optional[Dict[str, Any]] = None,
     ) -> Union[str, List[str], List[List[str]]]:
         """
         Generates text using the model
@@ -365,6 +366,9 @@ class Model:
         elif top_k is not None:
             options["do_sample"] = True
             options["top_k"] = float(top_k)
+
+        if extra_options:
+            options.update(extra_options)
 
         out = self.model.generate(
             input_v,
