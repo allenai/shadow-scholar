@@ -2,6 +2,7 @@ from datetime import datetime
 import inspect
 import json
 from pathlib import Path
+from pprint import pprint
 from typing import Literal, Optional
 
 from shadow_scholar.cli import Argument, cli, safe_import
@@ -46,6 +47,9 @@ class ModelWrapper:
         arguments = self.signature.bind(*args, **kwargs).arguments
         output = self.model.generate(**arguments)
         self.log(arguments, output)
+
+        if isinstance(output, list):
+            output = f"```\n{json.dumps(output, indent=2)}\n```"
         return output
 
 
