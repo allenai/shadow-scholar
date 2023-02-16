@@ -22,9 +22,13 @@ class ModelWrapper:
         precision: Literal["full", "mixed"] = "full",
         tensor_parallel: bool = False,
         logdir: Optional[str] = None,
+        leftover_space: float = 0.3,
     ):
         self.model = Model(
-            name=name, precision=precision, tensor_parallel=tensor_parallel
+            name=name,
+            precision=precision,
+            tensor_parallel=tensor_parallel,
+            leftover_space=leftover_space,
         )
         self.start_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.logdir = Path(logdir) if logdir else None
@@ -54,6 +58,18 @@ class ModelWrapper:
                 # no empty strings
                 if k.strip() and v.strip()
             }
+
+        arguments["top_k"] = (
+            int(top_k) if (top_k := arguments.pop("top_k", None)) else None
+        )
+
+        arguments["top_p"] = (
+            float(top_p) if (top_p := arguments.pop("top_p", None)) else None
+        )
+
+        arguments["penalty_alpha"] = (
+            float(pa) if (pa := arguments.pop("penalty_alpha", None)) else None
+        )
 
         output = self.model.generate(**arguments)
         self.log(arguments, output)
@@ -101,6 +117,12 @@ class ModelWrapper:
             default=None,
             help="Directory to log inputs and outputs to",
         ),
+        Argument(
+            '-s', '--leftover-space',
+            default=0.3,
+            type=float,
+            help="the amount of extra space to leave on the gpu during"
+        )
     ],
     requirements=[
         "gradio",
@@ -117,12 +139,14 @@ def run_galactica_demo(
     precision: Literal["full", "mixed"],
     parallelize: bool = False,
     logdir: Optional[str] = None,
+    leftover_space: float = 0.3,
 ):
     gl_model = ModelWrapper(
         name=model_name,
         precision=precision,
         tensor_parallel=parallelize,
         logdir=logdir,
+        leftover_space=leftover_space,
     )
 
     with gr.Blocks(css=CSS) as demo:
@@ -152,8 +176,8 @@ def run_galactica_demo(
                             "the model should generate"
                         ),
                     )
-                    top_p = gr.Number(
-                        value=None,
+                    top_p = gr.Textbox(
+                        value='',
                         label=(
                             "top_p: if set to float < 1, only the "
                             "smallest set of most probable tokens with "
@@ -161,15 +185,15 @@ def run_galactica_demo(
                             "are kept for generation."
                         ),
                     )
-                    top_k = gr.Number(
-                        value=None,
+                    top_k = gr.Textbox(
+                        value='',
                         label=(
                             "top_k: size of the candidate set that is "
                             "used to re-rank for contrastive search"
                         ),
                     )
-                    penalty_alpha = gr.Number(
-                        value=None,
+                    penalty_alpha = gr.Textbox(
+                        value='',
                         label=(
                             "penalty_alpha: degeneration penalty for "
                             "contrastive search"

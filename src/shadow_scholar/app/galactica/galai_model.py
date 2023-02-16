@@ -41,6 +41,7 @@ class Model:
         name: str,
         precision: Literal["full", "mixed"] = "full",
         tensor_parallel: bool = False,
+        leftover_space: float = 0.3,
     ):
         """
         Initializes a new model
@@ -70,6 +71,7 @@ class Model:
         self.tensor_parallel = tensor_parallel
         self.max_input_length = 2048
         self._master_port: Union[int, None] = None
+        self.leftover_space = leftover_space
 
         self._set_tokenizer(self.name)
         self._load_checkpoint(self.name)
@@ -98,7 +100,8 @@ class Model:
             device_map = infer_auto_device_map(
                 empty_model,
                 max_memory={
-                    gid: f"{mem * .7:.0f}MB" for gid, mem in _gpu_mem().items()
+                    gid: f"{mem * (1 - self.leftover_space):.0f}MB"
+                    for gid, mem in _gpu_mem().items()
                 },
                 no_split_module_classes=[
                     "OPTDecoderLayer",
@@ -359,13 +362,13 @@ class Model:
         options = {}
         if penalty_alpha is not None:
             options["penalty_alpha"] = float(penalty_alpha)
-            options["top_k"] = float(top_k) if top_k is not None else 0
+            options["top_k"] = int(top_k) if top_k is not None else 0
         elif top_p is not None:
             options["do_sample"] = True
             options["top_p"] = float(top_p)
         elif top_k is not None:
             options["do_sample"] = True
-            options["top_k"] = float(top_k)
+            options["top_k"] = int(top_k)
 
         if extra_options:
             options.update(extra_options)
