@@ -1,10 +1,10 @@
 # flake8: noqa
 
-CSS = '''
+CSS = """
 code {
     white-space : pre-wrap !important;
 }
-'''
+"""
 
 
 INSTRUCTIONS = '''\

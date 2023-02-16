@@ -214,9 +214,10 @@ class Registry:
         parser = ArgumentParser("shadow-scholar")
         parser.add_argument("entrypoint", choices=self._registry.keys())
         parser.add_argument(
-            '-l', '--list-requirements',
-            action='store_true',
-            help='List the requirements for all entrypoints.'
+            "-l",
+            "--list-requirements",
+            action="store_true",
+            help="List the requirements for all entrypoints.",
         )
 
         opts, rest = parser.parse_known_args()

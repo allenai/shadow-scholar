@@ -21,7 +21,6 @@ def box_group_from_span_group(
     merge_if_on_same_row: bool = True,
     position_rounding: int = 2,
 ) -> "BoxGroup":
-
     doc = span_group.doc or doc
     if doc is None:
         raise ValueError("span_group must have a doc, or doc must be provided")
@@ -45,7 +44,6 @@ def merge_box_groups_on_same_row(
     boxes: Optional[Iterable["Box"]] = None,
     position_rounding: int = 2,
 ) -> Sequence["Box"]:
-
     if box_groups is not None and boxes is not None:
         raise ValueError("either box_groups or boxes must be provided")
 
