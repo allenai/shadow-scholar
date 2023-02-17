@@ -19,7 +19,7 @@ class ModelWrapper:
     def __init__(
         self,
         name: str,
-        precision: Literal["full", "mixed"] = "full",
+        precision: Literal["full", "mixed", "byte"] = "full",
         tensor_parallel: bool = False,
         logdir: Optional[str] = None,
         leftover_space: float = 0.3,
@@ -82,7 +82,7 @@ class ModelWrapper:
         Argument(
             "-m",
             "--model-name",
-            default="facebook/galactica-125m",
+            default="mini",
             help="Pretrained model or path to local checkpoint",
         ),
         Argument(
@@ -102,7 +102,7 @@ class ModelWrapper:
             "--precision",
             default="full",
             help="Precision to use for the model",
-            choices=["full", "mixed"],
+            choices=["full", "mixed", "byte"],
         ),
         Argument(
             "-a",
@@ -134,10 +134,10 @@ class ModelWrapper:
     ],
 )
 def run_galactica_demo(
-    model_name: str,
-    server_port: int,
-    server_name: str,
-    precision: Literal["full", "mixed"],
+    model_name: str = "mini",
+    server_port: int = 7860,
+    server_name: str = "localhost",
+    precision: Literal["full", "mixed", "byte"] = "full",
     parallelize: bool = False,
     logdir: Optional[str] = None,
     leftover_space: float = 0.3,

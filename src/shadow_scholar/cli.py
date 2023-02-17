@@ -97,7 +97,9 @@ class EntryPoint(Generic[PS, RT]):
 
         if self.missing_reqs:
             raise ModuleNotFoundError(
-                f"Missing requirements: {', '.join(self.missing_reqs)}"
+                f"Missing requirements: {' '.join(self.missing_reqs)};"
+                f"run `python -m shadow_scholar {self.name} -l` to list "
+                "all requirements for this entrypoint."
             )
         return self.func(*args, **kwargs)
 
@@ -110,7 +112,7 @@ class EntryPoint(Generic[PS, RT]):
         opts, *_ = ap.parse_known_args(args)
 
         parsed_args = inspect.signature(self.func).bind(**vars(opts)).arguments
-        return self.func(**parsed_args)  # pyright: ignore
+        return self(**parsed_args)  # pyright: ignore
 
     @classmethod
     def decorate(

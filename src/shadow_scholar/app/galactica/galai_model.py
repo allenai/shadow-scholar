@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union, cast
 
 from shadow_scholar.cli import safe_import
 
+# from .convert_to_int8 import replace_linear_with_int8
 from .galai_utils import escape_custom_split_sequence
 
 with safe_import():
@@ -39,7 +40,7 @@ class Model:
     def __init__(
         self,
         name: str,
-        precision: Literal["full", "mixed"] = "full",
+        precision: Literal["full", "mixed", "byte"] = "full",
         tensor_parallel: bool = False,
         leftover_space: float = 0.3,
     ):
@@ -56,12 +57,18 @@ class Model:
             tensor_parallel (bool): Whether to use tensor parallelism
                 to load the model. This is only supported on NVIDIA
                 GPUs at requires 2 or more GPUs.
+            leftover_space (float): The amount of space to leave free
+                on the GPU when loading the model. This is useful if
+                you are expecting to run long sequences on the model.
         """
 
         self.name, self.dtype = self.variants[name]
         if precision == "mixed":
             self.dtype = torch.bfloat16
+        elif precision == "byte":
+            self.dtype = torch.float16
 
+        self.convert_to_int8 = precision == "byte"
         self.is_loaded = False
         self.num_gpus = (
             torch.cuda.device_count()
@@ -89,10 +96,10 @@ class Model:
     def __str__(self):
         return f"model `{self.name}` with type `{self.dtype}`"
 
-    def _load_checkpoint(self, checkpoint_path: str):
+    def _load_checkpoint(self, _: str):
         if self.tensor_parallel:
             config = OPTConfig.from_pretrained(self.name)
-            with init_empty_weights():
+            with init_empty_weights():  # pyright: ignore
                 empty_model = AutoModelForCausalLM.from_config(config)
 
             from ._old import _gpu_mem
@@ -147,6 +154,19 @@ class Model:
                 .to(device)  # pyright: ignore
                 .eval()
             )
+
+        if self.convert_to_int8:
+            raise NotImplementedError(
+                "Conversion to int8 is not supported yet. "
+            )
+            # replace_linear_with_int8(
+            #     self.model,
+            #     do_not_convert=[
+            #         "lm_head",
+            #         # 'model.decoder.embed_tokens',
+            #         # 'model.decoder.embed_positions'
+            #     ],
+            # )
 
     def _buggy_load_checkpoint(self, checkpoint_path: str):
         """

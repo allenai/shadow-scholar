@@ -30,6 +30,19 @@ def get_submodule(model: "torch.nn.Module", target: str) -> "torch.nn.Module":
     return model
 
 
+def set_submodule(
+    model: "torch.nn.Module", target: str, value: "torch.nn.Module"
+):
+    ...
+    parts = target.split(".")
+    for part in parts[:-1]:
+        if re.match(r"\d+", part):
+            model = model[int(part)]  # pyright: ignore
+        else:
+            model = getattr(model, part)
+    setattr(model, parts[-1], value)
+
+
 def move_tensors(
     module: "torch.nn.Module",
     input: tuple,
