@@ -98,7 +98,6 @@ class TfIdfRanker(BaseRanker["np.ndarray"]):
         ascii: bool = True,
         spacy_model: str = "en_core_web_sm",
     ) -> None:
-
         super().__init__(cache_size=cache_size)
 
         self.lower = lower
@@ -206,7 +205,6 @@ class SentenceTransformerRanker(BaseRanker["torch.Tensor"]):
         pooling: Union[None, PoolingModes, str] = None,
         **kwargs,
     ) -> None:
-
         super().__init__(**kwargs)
 
         if pooling is None:
@@ -243,7 +241,6 @@ class SentenceTransformerRanker(BaseRanker["torch.Tensor"]):
     def _score(
         self, query: str, docs: Sequence[Document]
     ) -> Sequence[Document]:
-
         query_vec, *_ = self.encode(
             [Document(text=query, did=0)], norm=self.norm_doc
         )

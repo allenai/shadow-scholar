@@ -10,13 +10,13 @@ from typing import Iterable, List, Literal, Optional, Union
 from shadow_scholar.cli import Argument, cli, safe_import
 
 with safe_import():
-    from tqdm import tqdm
     from smashed.utils.io_utils import (
         MultiPath,
         open_file_for_read,
         open_file_for_write,
         recursively_list_files,
     )
+    from tqdm import tqdm
 
 
 @dataclass
@@ -137,7 +137,6 @@ def _process_collection(
     with open_file_for_read(
         src, "rb" if compressed else "r"
     ) as inf, open_file_for_write(dst, "wb" if compressed else "rb") as outf:
-
         if compressed:
             inf = gzip.GzipFile(fileobj=inf, mode="rb")
         if compressed:

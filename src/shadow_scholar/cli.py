@@ -4,7 +4,6 @@ from argparse import ArgumentParser
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-import sys
 from typing import (
     Any,
     Callable,
@@ -98,7 +97,9 @@ class EntryPoint(Generic[PS, RT]):
 
         if self.missing_reqs:
             raise ModuleNotFoundError(
-                f"Missing requirements: {', '.join(self.missing_reqs)}"
+                f"Missing requirements: {' '.join(self.missing_reqs)};"
+                f"run `python -m shadow_scholar {self.name} -l` to list "
+                "all requirements for this entrypoint."
             )
         return self.func(*args, **kwargs)
 
@@ -111,7 +112,7 @@ class EntryPoint(Generic[PS, RT]):
         opts, *_ = ap.parse_known_args(args)
 
         parsed_args = inspect.signature(self.func).bind(**vars(opts)).arguments
-        return self.func(**parsed_args)  # pyright: ignore
+        return self(**parsed_args)  # pyright: ignore
 
     @classmethod
     def decorate(
@@ -214,13 +215,28 @@ class Registry:
         """Creates a click command group for all registered functions."""
         parser = ArgumentParser("shadow-scholar")
         parser.add_argument("entrypoint", choices=self._registry.keys())
+        parser.add_argument(
+            "-l",
+            "--list-requirements",
+            action="store_true",
+            help="List the requirements for all entrypoints.",
+        )
 
         opts, rest = parser.parse_known_args()
 
         if opts.entrypoint in self._registry:
-            return self._registry[opts.entrypoint].cli(rest)
+            entrypoint = self._registry[opts.entrypoint]
+        else:
+            raise ValueError(f"No entrypoint found for {opts.entrypoint}")
 
-        raise ValueError(f"No entrypoint found for {opts.entrypoint}")
+        if opts.list_requirements:
+            print(
+                f"Requirements for {entrypoint.name}: "
+                f"{' '.join(entrypoint.reqs)}"
+            )
+            return
+        else:
+            entrypoint.cli(rest)
 
 
 @contextmanager

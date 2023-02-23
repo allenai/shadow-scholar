@@ -166,7 +166,6 @@ def _read_paths(
     root: Path,
     cls: Type[T],
 ) -> Iterable[T]:
-
     all_files = [root]
 
     while len(all_files) > 0:
@@ -187,7 +186,6 @@ def from_files(
     queries_path: Optional[Union[str, Path]] = None,
     qrels_path: Optional[Union[str, Path]] = None,
 ) -> Dataset:
-
     dataset = Dataset()
 
     for doc in _read_paths(root=Path(docs_path), cls=Document):
