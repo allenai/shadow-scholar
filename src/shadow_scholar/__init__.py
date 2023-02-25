@@ -1,11 +1,11 @@
 from .app.galactica.main import run_galactica_demo
 from .app.pdod.main import run_pdod, run_pdod_web_ui
-from .app.qa.data import process_collection
+from .app.qa.main import run_qa_demo
 from .collections.athena import get_s2ag_abstracts
 
 __all__ = [
     "get_s2ag_abstracts",
-    "process_collection",
+    "run_qa_demo",
     "run_pdod",
     "run_pdod_web_ui",
     "run_galactica_demo",
