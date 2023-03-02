@@ -44,8 +44,8 @@ class UI:
 
     @property
     def rank(self) -> str:
-        if torch.distributed.is_initialized():
-            return str(torch.distributed.get_rank())
+        if torch.distributed.is_initialized():  # pyright: ignore
+            return str(torch.distributed.get_rank())    # pyright: ignore
         else:
             return "null"
 
@@ -195,9 +195,6 @@ def run_llama_demo(
     server_name: str = "localhost",
     logdir: Optional[Union[str, Path]] = None,
 ):
-    temperature: float = 0.8
-    top_p: float = 0.95
-
     num_gpus = NUM_GPUS_MAP[model_name]
 
     try:
@@ -256,7 +253,7 @@ def run_llama_demo(
             world_size=world_size,
         )
 
-        torch.distributed.barrier()
+        torch.distributed.barrier()     # pyright: ignore
 
         while True:
             input_data = ui.get("input")
@@ -290,7 +287,7 @@ def run_llama_demo(
                 ui.delete("input")
                 sleep(1)
 
-            torch.distributed.barrier()
+            torch.distributed.barrier()     # pyright: ignore
     finally:
         for p in ps:
             p.terminate()
