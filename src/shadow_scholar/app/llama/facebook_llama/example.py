@@ -1,19 +1,19 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
-# This software may be used and distributed according to the terms of the GNU General Public License version 3.
+# This software may be used and distributed according to the terms of the
+# GNU General Public License version 3.
 
-from typing import Tuple
+import json
 import os
 import sys
-import torch
-import fire
 import time
-import json
-
 from pathlib import Path
+from typing import Tuple
 
+import fire
+import torch
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 
-from . import ModelArgs, Transformer, Tokenizer, LLaMA
+from . import LLaMA, ModelArgs, Tokenizer, Transformer
 
 
 def setup_model_parallel() -> Tuple[int, int]:
@@ -29,11 +29,13 @@ def setup_model_parallel() -> Tuple[int, int]:
     return local_rank, world_size
 
 
-def load(ckpt_dir: str, tokenizer_path: str, local_rank: int, world_size: int) -> LLaMA:
+def load(
+    ckpt_dir: str, tokenizer_path: str, local_rank: int, world_size: int
+) -> LLaMA:
     start_time = time.time()
     checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
-    assert (
-        world_size == len(checkpoints)
+    assert world_size == len(
+        checkpoints
     ), f"Loading a checkpoint for MP={len(checkpoints)} but world size is {world_size}"
     ckpt_path = checkpoints[local_rank]
     print("Loading")
@@ -41,7 +43,9 @@ def load(ckpt_dir: str, tokenizer_path: str, local_rank: int, world_size: int) -
     with open(Path(ckpt_dir) / "params.json", "r") as f:
         params = json.loads(f.read())
 
-    model_args: ModelArgs = ModelArgs(max_seq_len=1024, max_batch_size=32, **params)
+    model_args: ModelArgs = ModelArgs(
+        max_seq_len=1024, max_batch_size=32, **params
+    )
     tokenizer = Tokenizer(model_path=tokenizer_path)
     model_args.vocab_size = tokenizer.n_words
     torch.set_default_tensor_type(torch.cuda.HalfTensor)
@@ -54,14 +58,24 @@ def load(ckpt_dir: str, tokenizer_path: str, local_rank: int, world_size: int) -
     return generator
 
 
-def main(ckpt_dir: str, tokenizer_path: str, temperature: float = 0.8, top_p: float = 0.95):
+def main(
+    ckpt_dir: str,
+    tokenizer_path: str,
+    temperature: float = 0.8,
+    top_p: float = 0.95,
+):
     local_rank, world_size = setup_model_parallel()
     if local_rank > 0:
-        sys.stdout = open(os.devnull, 'w')
+        sys.stdout = open(os.devnull, "w")
 
     generator = load(ckpt_dir, tokenizer_path, local_rank, world_size)
-    prompts = ["The capital of Germany is the city of", "Here is my sonnet in the style of Shakespeare about an artificial intelligence:"]
-    results = generator.generate(prompts, max_gen_len=256, temperature=temperature, top_p=top_p)
+    prompts = [
+        "The capital of Germany is the city of",
+        "Here is my sonnet in the style of Shakespeare about an artificial intelligence:",
+    ]
+    results = generator.generate(
+        prompts, max_gen_len=256, temperature=temperature, top_p=top_p
+    )
 
     for result in results:
         print(result)

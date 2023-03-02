@@ -1,11 +1,12 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
-# This software may be used and distributed according to the terms of the GNU General Public License version 3.
+# This software may be used and distributed according to the terms of the
+# GNU General Public License version 3.
 
-from sentencepiece import SentencePieceProcessor
+import os
 from logging import getLogger
 from typing import List
-import os
 
+from sentencepiece import SentencePieceProcessor
 
 logger = getLogger()
 
@@ -28,7 +29,7 @@ class Tokenizer:
         assert self.sp_model.vocab_size() == self.sp_model.get_piece_size()
 
     def encode(self, s: str, bos: bool, eos: bool) -> List[int]:
-        assert type(s) is str
+        assert isinstance(s, str)
         t = self.sp_model.encode(s)
         if bos:
             t = [self.bos_id] + t

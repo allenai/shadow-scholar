@@ -1,186 +1,148 @@
+import datetime
 import json
-from ast import literal_eval
-from typing import Optional
+import multiprocessing
+import sys
+from pathlib import Path
+from time import sleep
+from typing import Any, Dict, Literal, Optional, Union
+
+import requests
 
 from shadow_scholar.cli import Argument, cli, safe_import
 
 with safe_import():
+    import fire
     import gradio as gr
+    import torch
 
-    from .facebook_llama.example import setup_model_parallel, load
+    from shadow_scholar.app.llama.facebook_llama.example import (
+        load,
+        setup_model_parallel,
+    )
 
 
-class ModelWrapper:
+NUM_GPUS_MAP = {
+    "7B": 1,
+    "13B": 2,
+    "30B": 4,
+    "65B": 8,
+}
+
+
+class UI:
     def __init__(
         self,
-        name: str,
         model_name: str,
-        model_base_path: str,
+        server_name: str,
+        ext_port: int,
+        int_port: int,
     ):
-        local_rank, world_size = setup_model_parallel()
-        if local_rank > 0:
-            sys.stdout = open(os.devnull, 'w')
+        self.model_name = model_name
+        self.server_name = server_name
+        self.ext_port = ext_port
+        self.int_port = int_port
 
-        generator = load(ckpt_dir, tokenizer_path, local_rank, world_size)
-        prompts = ["The capital of Germany is the city of", "Here is my sonnet in the style of Shakespeare about an artificial intelligence:"]
-        results = generator.generate(prompts, max_gen_len=256, temperature=temperature, top_p=top_p)
+    @property
+    def rank(self) -> str:
+        if torch.distributed.is_initialized():
+            return str(torch.distributed.get_rank())
+        else:
+            return "null"
 
-    def __str__(self) -> str:
-        return str(self.model) + f" start_time={self.start_time}"
+    def get(self, what: Literal["input", "output"]) -> dict:
+        resp = requests.get(
+            f"http://localhost:{self.int_port}/get/{what}?rank={self.rank}"
+        )
+        return resp.json()
 
-    def log(self, arguments, output):
-        if self.logdir is None:
-            return
-
-        self.logdir.mkdir(parents=True, exist_ok=True)
-
-        fn = f'{self.model.name.replace("/", "_")}_{self.start_time}.jsonl'
-        with open(self.logdir / fn, "a") as f:
-            f.write(json.dumps({"input": arguments, "output": output}) + "\n")
-
-    def __call__(self, *args, **kwargs):
-        arguments = self.signature.bind(*args, **kwargs).arguments
-
-        if isinstance(opt := arguments.pop("extra_options", None), list):
-            arguments["extra_options"] = {
-                # evaluate strings as python literals
-                k: literal_eval(v)
-                for k, v in opt
-                # no empty strings
-                if k.strip() and v.strip()
-            }
-
-        arguments["top_k"] = (
-            int(top_k) if (top_k := arguments.pop("top_k", None)) else None
+    def set(self, what: Literal["input", "output"], value: dict):
+        requests.post(
+            f"http://localhost:{self.int_port}/set/{what}?rank={self.rank}",
+            json=value,
         )
 
-        arguments["top_p"] = (
-            float(top_p) if (top_p := arguments.pop("top_p", None)) else None
+    def delete(self, what: Literal["input", "output"]):
+        requests.get(
+            f"http://localhost:{self.int_port}/delete/{what}?rank={self.rank}"
         )
 
-        arguments["penalty_alpha"] = (
-            float(pa) if (pa := arguments.pop("penalty_alpha", None)) else None
+    def runner(
+        self, text: str, max_length: int, temperature: float, top_p: float
+    ) -> dict:
+        self.set(
+            "input",
+            {
+                "text": text,
+                "max_length": max_length,
+                "temperature": temperature,
+                "top_p": top_p,
+            },
         )
+        output = {}
+        while True:
+            output = self.get("output")
+            if output:
+                break
+            sleep(1)
 
-        output = self.model.generate(**arguments)
-        self.log(arguments, output)
-        return output
+        self.delete("output")
+        return output["text"]
 
-
-def draw_ui(model_name: str, model_wrapper: ModelWrapper):
-    with gr.Blocks(css=CSS) as demo:
-        with gr.Row():
-            gr.Markdown(f"# LLaMA {model_name} Demo")
-        # with gr.Tab("Demo"):
-            # with gr.Row():
-            #     gr.Markdown(
-            #         f"**Currently loaded**: {gl_model}\n\n"
-            #         + "Available models:\n"
-            #         + "\n".join(
-            #             f" - {k.capitalize()}: `{n}`"
-            #             for k, (n, _) in gl_model.model.variants.items()
-            #         )
-            #     )
-        with gr.Row():
-            with gr.Column():
-                input_text = gr.Textbox(
-                    lines=5, label="Input", placeholder="Prompt text"
-                )
-                submit_button = gr.Button(label="Generate")
-
-                max_new_tokens = gr.Number(
-                    value=128,
-                    label=(
-                        "max_new_tokens: max number of new tokens "
-                        "the model should generate"
-                    ),
-                )
-                top_p = gr.Textbox(
-                    value="",
-                    label=(
-                        "top_p: if set to float < 1, only the "
-                        "smallest set of most probable tokens with "
-                        "probabilities that add up to top_p or higher "
-                        "are kept for generation."
-                    ),
-                )
-                top_k = gr.Textbox(
-                    value="",
-                    label=(
-                        "top_k: size of the candidate set that is "
-                        "used to re-rank for contrastive search"
-                    ),
-                )
-                penalty_alpha = gr.Textbox(
-                    value="",
-                    label=(
-                        "penalty_alpha: degeneration penalty for "
-                        "contrastive search"
-                    ),
-                )
-
-                num_beams = gr.Number(
-                    value=1,
-                    label=(
-                        "num_beams: number of beams for beam search. "
-                        "1 means no beam search."
-                    ),
-                )
-                num_return_sequences = gr.Number(
-                    value=1,
-                    label=(
-                        "num_return_sequences: number of separate"
-                        "computed returned sequences for each element "
-                        "in the batch."
-                    ),
-                )
-                return_full_text = gr.Checkbox(
-                    label=(
-                        "return_full_text: whether to return the full "
-                        "text or just the newly generated text."
-                    ),
-                    value=True,
-                )
-                new_doc = gr.Checkbox(
-                    label=(
-                        "new_doc: whether the model should attempt "
-                        "to generate a full document"
-                    ),
-                    value=False,
-                )
-                extra_options = gr.Dataframe(
-                    label="Extra options to pass to model.generate()",
-                    headers=["Parameter", "Value"],
-                    col_count=2,
-                    type="array",
-                    interactive=True,
-                )
-
-            with gr.Column():
-                output_text = gr.Textbox(
-                    lines=25,
-                    label="Output",
-                    placeholder="Generated text",
-                    interactive=False,
-                )
-
-        submit_button.click(
-            fn=model_wrapper,
+    def start_ui(self):
+        demo = gr.Interface(
+            fn=self.runner,
             inputs=[
-                input_text,
-                max_new_tokens,
-                new_doc,
-                top_p,
-                top_k,
-                penalty_alpha,
-                num_beams,
-                num_return_sequences,
-                return_full_text,
-                extra_options,
+                gr.Text(lines=10, label="Input"),
+                gr.Number(value=256, label="Max Length"),
+                gr.Slider(
+                    minimum=0.0,
+                    maximum=1.0,
+                    step=0.05,
+                    value=0.8,
+                    label="Temperature",
+                ),
+                gr.Slider(
+                    minimum=0.0,
+                    maximum=1.0,
+                    step=0.05,
+                    value=0.95,
+                    label="Top P",
+                ),
             ],
-            outputs=[output_text],
+            outputs=gr.Text(lines=10, label="Output"),
+            title=f"LLaMA {self.model_name} Demo",
+            # allow_flagging=False,
+            # logdir=lg
         )
-    return demo
+        demo.queue(concurrency_count=1)
+        demo.launch(server_name=self.server_name, server_port=self.ext_port)
+
+    def start_server(self):
+        from flask import Flask, jsonify, request
+
+        app = Flask(__name__)
+
+        g: Dict[str, Any] = {"input": None, "output": None}
+
+        def content(what: str) -> dict:
+            return {**(g.get(what, None) or {})}
+
+        @app.route("/get/<what>")
+        def _get(what: Literal["input", "output"]):
+            return jsonify(**content(what))
+
+        @app.route("/set/<what>", methods=["POST"])
+        def _set(what: Literal["input", "output"]):
+            if request.json is not None:
+                g[what] = dict(request.json)
+            return jsonify(**content(what))
+
+        @app.route("/delete/<what>")
+        def _delete(what: Literal["input", "output"]):
+            g[what] = {}
+            return jsonify(**content(what))
+
+        app.run()
 
 
 @cli(
@@ -196,7 +158,7 @@ def draw_ui(model_name: str, model_wrapper: ModelWrapper):
             "-m",
             "--model-name",
             default="7B",
-            choices=["7B", "13B", "30B", "66B"],
+            choices=list(NUM_GPUS_MAP.keys()),
             help="Pretrained model or path to local checkpoint",
         ),
         Argument(
@@ -231,18 +193,111 @@ def run_llama_demo(
     model_name: str = "7B",
     server_port: int = 7860,
     server_name: str = "localhost",
-    logdir: Optional[str] = None,
+    logdir: Optional[Union[str, Path]] = None,
 ):
+    temperature: float = 0.8
+    top_p: float = 0.95
 
-    local_rank, world_size = setup_model_parallel()
-    if local_rank > 0:
-        sys.stdout = open(os.devnull, 'w')
+    num_gpus = NUM_GPUS_MAP[model_name]
+
+    try:
+        local_rank, world_size = setup_model_parallel()
+    except ValueError:
+        # something went wrong with model parallel setup
+        local_rank, world_size = -1, -1
+
+    if world_size < 0:
+        message = (
+            "This application is meant to be launched with "
+            "`torch.distributed.launch`, but it appears that "
+            "this is not the case. Please launch the application "
+            "with the following command:\n"
+            f"torchrun --nproc_per_node {num_gpus} {__file__} "
+            f"--model-root {model_root} "
+            f"--model-name {model_name} "
+            f"--server-port {server_port} "
+            f"--server-name {server_name} "
+            f"--logdir {logdir}"
+        )
+        print(message, file=sys.stderr)
+        sys.exit(1)
+
+    if logdir:
+        current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        logdir = Path(f"{logdir}/{model_name}_{current_date}.jsonl")
+        if local_rank == 0:
+            logdir.parent.mkdir(parents=True, exist_ok=True)
+
+    ui = UI(
+        model_name=model_name,
+        server_name=server_name,
+        ext_port=server_port,
+        int_port=5000,
+    )
+
+    ps = []
+    if local_rank == 0:
+        # start UI and communication server
+        ps.append(multiprocessing.Process(target=ui.start_server))
+        ps.append(multiprocessing.Process(target=ui.start_ui))
+
+    for p in ps:
+        p.start()
+
+    print(f"Starting Llama demo, rank: {local_rank}")
+
+    try:
+        # load models
+        model_root = model_root.rstrip("/")
+        generator = load(
+            ckpt_dir=f"{model_root}/{model_name}",
+            tokenizer_path=f"{model_root}/tokenizer.model",
+            local_rank=local_rank,
+            world_size=world_size,
+        )
+
+        torch.distributed.barrier()
+
+        while True:
+            input_data = ui.get("input")
+            if not input_data:
+                sleep(1)
+                continue
+
+            if local_rank == 0:
+                print(f"RANK {local_rank}:", json.dumps(input_data, indent=2))
+
+            results = generator.generate(
+                [input_data["text"]],
+                max_gen_len=int(input_data["max_length"]),
+                temperature=float(input_data["temperature"]),
+                top_p=float(input_data["top_p"]),
+            )
+            output_data = {"text": results[0]}
+
+            if logdir is not None:
+                with open(logdir, "a") as f:
+                    data = json.dumps(
+                        {"input": input_data, "output": output_data}, indent=2
+                    )
+                    f.write(data + "\n")
+
+            if local_rank == 0:
+                print(f"RANK {local_rank}:", json.dumps(output_data, indent=2))
+
+            if local_rank == 0:
+                ui.set("output", output_data)
+                ui.delete("input")
+                sleep(1)
+
+            torch.distributed.barrier()
+    finally:
+        for p in ps:
+            p.terminate()
+            p.join()
+        if local_rank == 0:
+            gr.close_all()
 
 
-    # gl_model = ModelWrapper(
-    #     name=model_name,
-    #     precision=precision,
-    #     tensor_parallel=parallelize,
-    #     logdir=logdir,
-    #     leftover_space=leftover_space,
-    # )
+if __name__ == "__main__":
+    fire.Fire(run_llama_demo)

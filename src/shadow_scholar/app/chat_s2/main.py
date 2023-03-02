@@ -47,20 +47,52 @@ class ACT(Enum):
 @dataclass
 class Paper:
     sha1: str
-    cache: dict = field(default_factory=dict)
-    s2_api_key: str = os.environ.get('S2_API_KEY', '')
+    _cache: Optional[dict] = None
+    _s2_api_key: str = os.environ.get('S2_API_KEY', '')
     # corpus_id: Optional[int] = None
     # title: Optional[str] = None
     # abstract: Optional[str] = None
     # paragraphs: Optional[List[str]] = None
 
+    @classmethod
+    def api_fields(cls) -> List[str]:
+        return [
+            'title','abstract','venue','fieldsOfStudy','authors',
+            'isOpenAccess','year'
+        ]
+
+    @property
+    def cache(self) -> dict:
+        if self._cache is None:
+            url = (
+                "https://api.semanticscholar.org/graph/v1/paper/"
+                f"{self.sha1}?fields={','.join(self.api_fields())}"
+                f"title,venue,abstract,fieldsOfStudy,authors,isOpenAccess,year"
+            )
+            header = {'x-api-key': self._s2_api_key}
+            self._cache = requests.get(url, headers=header).json()
+        return self._cache
+
+    @cache.setter
+    def cache(self, value: dict):
+        if self._cache is not None:
+            raise ValueError('Cache already set')
+        self._cache = value
+
+    @property
+    def missing(self) -> bool:
+        return self._cache is None
+
     @property
     def url(self) -> str:
         return 'https://api.semanticscholar.org/{self.sha1}'
 
+    @property
+    def year(self) -> int:
+        return int(self.cache['year'])
+
     @classmethod
     def from_url(cls, url, s2_api_key: Optional[str]):
-        # https://www.semanticscholar.org/paper/On-clinical-decision-support-Cohan-Soldaini/903cca1f0cecb66dae7315acfa03500a22948d95
         is_valid_url = re.match(
             r'https://www.semanticscholar.org/paper/.*?/([a-f0-9]+)', url
         )
@@ -69,41 +101,24 @@ class Paper:
 
         sha1 = is_valid_url.group(1)
         if s2_api_key:
-            return cls(sha1=sha1, s2_api_key=s2_api_key)
+            return cls(sha1=sha1, _s2_api_key=s2_api_key)
         else:
             return cls(sha1=sha1)
 
-    def _fetch_single(self):
-        url = (
-            "https://api.semanticscholar.org/graph/v1/paper/"
-            f"{self.sha1}?fields="
-            f"title,venue,abstract,fieldsOfStudy,authors,isOpenAccess"
-        )
-        header = {'x-api-key': self.s2_api_key}
-        self.cache = requests.get(url, headers=header).json()
-
-    @cached_property
+    @property
     def title(self) -> str:
-        if 'title' not in self.cache:
-            self._fetch_single()
         return self.cache['title']
 
-    @cached_property
+    @property
     def abstract(self) -> str:
-        if 'abstract' not in self.cache:
-            self._fetch_single()
         return self.cache['abstract']
 
-    @cached_property
+    @property
     def is_open_access(self) -> bool:
-        if 'isOpenAccess' not in self.cache:
-            self._fetch_single()
         return self.cache['isOpenAccess']
 
-    @cached_property
+    @property
     def venue(self) -> str:
-        if 'venue' not in self.cache:
-            self._fetch_single()
         return self.cache['venue']
 
 
@@ -117,13 +132,34 @@ class State:
     def _fetch_stack(self):
         url = (
             "https://api.semanticscholar.org/graph/v1/paper/batch?"
-            "fields=title,abstract,venue,fieldsOfStudy,authors,isOpenAccess"
+            f"fields={','.join(Paper.api_fields())}"
         )
         header = {'x-api-key': self.s2_api_key}
-        data = {'ids': [paper.sha1 for paper in self.stack]}
+        missing, locations = zip([
+            (i, paper.sha1) for i, paper in enumerate(self.stack)
+            if paper.missing
+        ])
+        data = {'ids': missing}
         data = requests.post(url, headers=header, json=data).json()
-        for paper, cache in zip(self.stack, data):
-            paper.cache = cache
+        for loc, cache in zip(locations, data):
+            self.stack[loc].cache = cache   # pyright: ignore
+
+    def table_stack(self, rows: Optional[List[str]] = None):
+        html = []
+        for paper in self.stack:
+            if rows is not None and paper.sha1 not in rows:
+                continue
+            if paper.missing:
+                self._fetch_stack()
+
+            html.append(
+                f'<div class="paper_row">'
+                f'<p><a href="{paper.url}"><b>{paper.title}<b></a></p>'
+                f'<p>{paper.abstract[:100]}...</p>'
+                f'<p>{paper.venue}</p>'
+                f'<p>{paper.year}</p>'
+                '</div>'
+            )
 
 
 
@@ -167,7 +203,7 @@ class ChatS2:
         response = requests.get(url).json()
 
         results = [
-            {'paperId': item['link'].rsplit('/', 1)[-1], **item}
+            Paper.from_url(url=item['link'], s2_api_key=self.s2_key)
             for item in response.get('items', [])
         ]
         return results

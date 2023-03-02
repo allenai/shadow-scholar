@@ -92,12 +92,22 @@ class EntryPoint(Generic[PS, RT]):
         # check that all requirements are met (error raised later if not)
         self.missing_reqs = [r for r in reqs if not necessary(r, soft=True)]
 
+    @property
+    def spec(self) -> Tuple[str, str, str]:
+        """Returns a triple that identifies this entry point.
+
+        The first argument of the triple is the name of the entry point,
+        the second is the name of the function, and the third is the path
+        to the function.
+        """
+        return (self.name, self.func.__name__, self.func.__module__)
+
     def __call__(self, *args: PS.args, **kwargs: PS.kwargs) -> RT:
         """Run the function."""
 
         if self.missing_reqs:
             raise ModuleNotFoundError(
-                f"Missing requirements: {' '.join(self.missing_reqs)};"
+                f"Missing requirements: {' '.join(self.missing_reqs)}; "
                 f"run `python -m shadow_scholar {self.name} -l` to list "
                 "all requirements for this entrypoint."
             )
@@ -181,8 +191,13 @@ class Registry:
 
     def add(self, entry_point: EntryPoint) -> None:
         """Add an entry point to the registry."""
-        if entry_point.name in self._registry:
+        _, _, module = entry_point.spec
+
+        # we raise an error if the function is already in the registry
+        # and the user is not using a different entry point
+        if entry_point.name in self._registry and module != '__main__':
             raise KeyError(f"Func {entry_point.name} already in the registry")
+
         self._registry[entry_point.name] = entry_point
 
     def cli(

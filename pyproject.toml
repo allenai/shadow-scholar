@@ -1,6 +1,6 @@
 [project]
 name = "shadow_scholar"
-version = "0.1.0"
+version = "0.2.0"
 description = "🪄 Meddling with papers in the dark 🔮"
 authors = [
     {name = "Luca Soldaini", email = "lucas@allenai.org" }
@@ -37,6 +37,9 @@ dev = [
     "flake8-pyi>=22.8.1",
     "Flake8-pyproject>=1.1.0",
 ]
+
+[project.scripts]
+shadow = "shadow_scholar.cli:run"
 
 [build-system]
 build-backend = "setuptools.build_meta"
