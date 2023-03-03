@@ -93,7 +93,13 @@ class UI:
             fn=self.runner,
             inputs=[
                 gr.Text(lines=10, label="Input"),
-                gr.Number(value=256, label="Max Length"),
+                gr.Slider(
+                    minimum=1,
+                    maximum=2048,
+                    step=1,
+                    value=256,
+                    label="Max Length",
+                ),
                 gr.Slider(
                     minimum=0.0,
                     maximum=1.0,
@@ -264,12 +270,18 @@ def run_llama_demo(
             if local_rank == 0:
                 print(f"RANK {local_rank}:", json.dumps(input_data, indent=2))
 
-            results = generator.generate(
-                [input_data["text"]],
-                max_gen_len=int(input_data["max_length"]),
-                temperature=float(input_data["temperature"]),
-                top_p=float(input_data["top_p"]),
-            )
+            text = input_data["text"].strip()
+
+            if len(text) > 0:
+                results = generator.generate(
+                    [text],
+                    max_gen_len=int(input_data["max_length"]),
+                    temperature=float(input_data["temperature"]),
+                    top_p=float(input_data["top_p"]),
+                )
+            else:
+                results = [""]
+
             output_data = {"text": results[0]}
 
             if logdir is not None:
