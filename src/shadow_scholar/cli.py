@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from functools import partial
 from math import ceil, floor
 from pathlib import Path
-from re import A
 from typing import (
     Any,
     Callable,
@@ -44,11 +43,6 @@ class _M:
 
 
 M = _M()  # noqa: E305
-
-
-class ExtraInterruptFlagArgumentParser(ArgumentParser):
-    def error(self, message: str) -> "NoReturn":
-        return super().error(message)
 
 
 class Argument:
@@ -333,7 +327,7 @@ class Registry:
             print(self._formatted_entrypoints())
             sys.exit(1)
 
-        entrypoint = self._registry.get(entry_name, None)  # type: ignore
+        entrypoint = self._registry.get(entry_name, None)  # pyright: ignore
         if entrypoint is None:
             msg = (
                 "No entrypoint "
