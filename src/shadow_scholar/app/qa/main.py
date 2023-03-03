@@ -84,7 +84,6 @@ def create_context(question, df, max_len=3800, size="davinci"):
     # Sort by distance and add the text to the context
     # until the context is too long
     for i, row in df.iterrows():
-
         # Add the length of the text to the current length
         cur_len += row["n_tokens"] + 4
 

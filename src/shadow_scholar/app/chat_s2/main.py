@@ -260,7 +260,6 @@ class ChatS2:
 
         output: PromptType = [(prompt, None)]
         for query in queries:
-
             output.append((None, f"Searching for **{query}**..."))
 
             # results = self.semantic_scholar_search(query)

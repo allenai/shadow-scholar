@@ -39,7 +39,6 @@ with safe_import():
 
 
 def assert_all_approx_close(a, b, rtol, atol, count):
-
     idx = torch.isclose(a.float(), b.float(), rtol, atol)
     sumval = (idx == 0).sum().item()
     if sumval > count:
@@ -145,7 +144,6 @@ class QuantizedLinearInt8(torch.nn.Module):
         )
 
     def forward(self, x):
-
         # TODO: the following two lines can be combined in a single more
         # efficient command. One way to do so is torch.einsum (as in the
         # commented code below), but the order of operations in einsum is

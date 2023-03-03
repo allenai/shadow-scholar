@@ -3,9 +3,9 @@ import json
 import multiprocessing
 import os
 import sys
+import time
 from pathlib import Path
 from time import sleep
-import time
 from typing import Any, Dict, Literal, NamedTuple, Optional, Union
 
 from shadow_scholar.cli import Argument, cli, safe_import
@@ -15,8 +15,8 @@ with safe_import():
     import gradio as gr
     import requests
     import torch
-    from fairscale.nn.model_parallel.initialize import (    # type: ignore
-        initialize_model_parallel
+    from fairscale.nn.model_parallel.initialize import (  # type: ignore
+        initialize_model_parallel,
     )
     from llama import LLaMA, ModelArgs, Tokenizer, Transformer  # type: ignore
 
@@ -44,7 +44,7 @@ class MpEnv(NamedTuple):
 def configure_model_parallel() -> MpEnv:
     env = MpEnv.auto()
 
-    torch.distributed.init_process_group("nccl")    # pyright: ignore
+    torch.distributed.init_process_group("nccl")  # pyright: ignore
     initialize_model_parallel(env.world_size)
     torch.cuda.set_device(env.local_rank)
 
@@ -59,7 +59,7 @@ def load_model_and_tokenizer(
     env: MpEnv,
     seq_len: int = 1024,
     batch_size: int = 32,
-) -> 'LLaMA':
+) -> "LLaMA":
     start_load_op = time.time()
 
     llama_dir = Path(llama_dir)
@@ -84,20 +84,20 @@ def load_model_and_tokenizer(
     ckpt_path = checkpoints[env.local_rank]
 
     print(f"Loading {ckpt_path} to GPU {env.local_rank}...")
-    checkpoint = torch.load(ckpt_path, map_location="cpu")
+    checkpoint = torch.load(str(ckpt_path), map_location="cpu")
     with open(Path(model_path) / "params.json", "r") as f:
         params = json.loads(f.read())
 
     # create model configuration
-    params.update({'max_seq_len': seq_len, 'max_batch_size': batch_size})
+    params.update({"max_seq_len": seq_len, "max_batch_size": batch_size})
     model_args = ModelArgs(**params)
 
     # spin-up tokenizer
-    tokenizer = Tokenizer(model_path=llama_dir / "tokenizer.model")
+    tokenizer = Tokenizer(model_path=str(llama_dir / "tokenizer.model"))
 
     # create model and set parameters up
     model_args.vocab_size = tokenizer.n_words
-    torch.set_default_tensor_type(torch.cuda.HalfTensor)    # pyright: ignore
+    torch.set_default_tensor_type(torch.cuda.HalfTensor)  # pyright: ignore
     model = Transformer(model_args)
     torch.set_default_tensor_type(torch.FloatTensor)
     model.load_state_dict(checkpoint, strict=False)
@@ -258,7 +258,7 @@ class UI:
         Argument(
             "-n",
             "--server-name",
-            default="localhost",
+            default="0.0.0.0",
             help="Server address to run the gradio app at",
         ),
         Argument(
@@ -275,6 +275,7 @@ class UI:
         "fire",
         "sentencepiece",
         "requests",
+        "flask",
     ],
 )
 def run_llama_demo(
@@ -287,12 +288,12 @@ def run_llama_demo(
     num_gpus = NUM_GPUS_MAP[model_name]
 
     try:
-        import llama    # noqa: F401    # pyright: ignore
+        import llama  # noqa: F401    # pyright: ignore
     except ImportError:
         msg = (
-            "LLaMA is not installed; you have to do so manually."
-            "Please run pip install git+https://github.com/facebookresearch/"
-            "llama.git@76066b1"
+            "LLaMA is not installed; you have to do so manually. "
+            "Please run `pip install git+https://github.com/facebookresearch/"
+            "llama.git@76066b1` and try again."
         )
         print(msg, file=sys.stderr)
         sys.exit(1)
