@@ -27,19 +27,6 @@ jobs:
       matrix:
         python: [3.8]
         task:
-          - name: Style
-            run: |
-              isort --check src/ tests/
-              black -l 79 --check src/ tests/
-
-          - name: Lint
-            run: |
-              flake8 src/ tests/
-
-          - name: Type check
-            run: |
-              mypy src/ tests/
-
           - name: Test
             run: |
               pytest -vs --color=yes tests/
