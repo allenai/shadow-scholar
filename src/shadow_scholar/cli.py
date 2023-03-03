@@ -1,15 +1,20 @@
 import inspect
 import json
+import shutil
+import sys
 from argparse import ArgumentParser
 from contextlib import contextmanager
 from functools import partial
+from math import ceil, floor
 from pathlib import Path
+from re import A
 from typing import (
     Any,
     Callable,
     Dict,
     Generic,
     List,
+    NamedTuple,
     Optional,
     Tuple,
     Type,
@@ -39,6 +44,11 @@ class _M:
 
 
 M = _M()  # noqa: E305
+
+
+class ExtraInterruptFlagArgumentParser(ArgumentParser):
+    def error(self, message: str) -> "NoReturn":
+        return super().error(message)
 
 
 class Argument:
@@ -76,6 +86,12 @@ class Argument:
         }
 
 
+class SpecTuple(NamedTuple):
+    name: str
+    func: str
+    module: str
+
+
 class EntryPoint(Generic[PS, RT]):
     def __init__(
         self,
@@ -93,14 +109,14 @@ class EntryPoint(Generic[PS, RT]):
         self.missing_reqs = [r for r in reqs if not necessary(r, soft=True)]
 
     @property
-    def spec(self) -> Tuple[str, str, str]:
+    def spec(self) -> SpecTuple:
         """Returns a triple that identifies this entry point.
 
         The first argument of the triple is the name of the entry point,
         the second is the name of the function, and the third is the path
         to the function.
         """
-        return (self.name, self.func.__name__, self.func.__module__)
+        return SpecTuple(self.name, self.func.__name__, self.func.__module__)
 
     def __call__(self, *args: PS.args, **kwargs: PS.kwargs) -> RT:
         """Run the function."""
@@ -195,7 +211,7 @@ class Registry:
 
         # we raise an error if the function is already in the registry
         # and the user is not using a different entry point
-        if entry_point.name in self._registry and module != '__main__':
+        if entry_point.name in self._registry and module != "__main__":
             raise KeyError(f"Func {entry_point.name} already in the registry")
 
         self._registry[entry_point.name] = entry_point
@@ -226,32 +242,108 @@ class Registry:
         )
         return decorated  # type: ignore
 
+    def _formatted_entrypoints(self, sep="   ") -> str:
+        term_width = shutil.get_terminal_size().columns
+
+        l_col, r_col = zip(
+            *(
+                (e.spec.name, f"{e.spec.module}.{e.spec.func}")
+                for e in sorted(self._registry.values(), key=lambda e: e.name)
+            )
+        )
+
+        # pad the left column to the longest name, trim if too long
+        longest_left = max(len(name) for name in l_col)
+        l_col = tuple(
+            name.ljust(longest_left)
+            if len(name) < term_width
+            else (name[: term_width - 3] + "...")
+            for name in l_col
+        )
+
+        # trim the right column if too long
+        max_length_right = term_width - longest_left - len(sep)
+        r_col = tuple(
+            name
+            if len(name) <= max_length_right
+            else (name[: max_length_right - 3] + "...")
+            for name in r_col
+        )
+        longest_right = max(len(name) for name in r_col)
+
+        # this is the total width of the entire table
+        format_width = longest_left + len(sep) + longest_right
+
+        title = "Available Entrypoints"
+        title_pad_width = (format_width - len(title) - 2) / 2
+
+        return (
+            "=" * format_width
+            + "\n"
+            + " " * floor(title_pad_width)
+            + "Available Entrypoints"
+            + " " * ceil(title_pad_width)
+            + "\n"
+            + "-" * format_width
+            + "\n"
+            + "\n".join(f"{lc}   {rc}" for lc, rc in zip(l_col, r_col))
+            + "\n"
+            + "=" * format_width
+        )
+
     def run(self):
         """Creates a click command group for all registered functions."""
         parser = ArgumentParser("shadow-scholar")
-        parser.add_argument("entrypoint", choices=self._registry.keys())
         parser.add_argument(
-            "-l",
+            "-r",
             "--list-requirements",
             action="store_true",
             help="List the requirements for all entrypoints.",
         )
+        parser.add_argument(
+            "-l",
+            "--list-entrypoints",
+            action="store_true",
+            help="List the requirements for all entrypoints.",
+        )
 
-        opts, rest = parser.parse_known_args()
+        # command line arguments; excluding the first one, which is the
+        # name of the script
+        args_ = sys.argv[1:]
 
-        if opts.entrypoint in self._registry:
-            entrypoint = self._registry[opts.entrypoint]
-        else:
-            raise ValueError(f"No entrypoint found for {opts.entrypoint}")
+        # the entrypoint is the first argument that is in the registry;
+        # if none is found, we raise an error
+        entrypoint_positions = [
+            i for i, p in enumerate(args_) if p in self._registry
+        ]
+        if len(entrypoint_positions) == 0:
+            print("No entrypoint provided!", file=sys.stderr)
+            print(self._formatted_entrypoints(), file=sys.stderr)
+
+        # separate between the global arguments and the any
+        # argument that comes after the mention of the first entrypoint
+        pre_args, entrypoint_name, post_args = (
+            args_[: (ep := entrypoint_positions[0])],
+            args_[ep],
+            args_[ep + 1 :],
+        )
+
+        # get any options for shadow-scholar cli itself
+        opts = parser.parse_args(pre_args)
+
+        # lookup the entrypoint; we don't need to check if it exists
+        # because we already did that above.
+        entrypoint = self._registry[entrypoint_name]
 
         if opts.list_requirements:
-            print(
-                f"Requirements for {entrypoint.name}: "
-                f"{' '.join(entrypoint.reqs)}"
-            )
-            return
+            n, r = entrypoint.name, entrypoint.reqs
+            print(f"Requirements for {n}: {' '.join(r)}")
+            sys.exit(1)
+        elif opts.list_entrypoints:
+            print(self._formatted_entrypoints())
+            sys.exit(1)
         else:
-            entrypoint.cli(rest)
+            entrypoint.cli(post_args)
 
 
 @contextmanager

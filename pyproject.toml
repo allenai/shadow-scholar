@@ -1,7 +1,7 @@
 [project]
 name = "shadow_scholar"
-version = "0.2.0"
-description = "🪄 Meddling with papers in the dark 🔮"
+version = "0.3.0"
+description = "🕶️ Meddling with papers in the dark 🎓"
 authors = [
     {name = "Luca Soldaini", email = "lucas@allenai.org" }
 ]
@@ -55,6 +55,8 @@ where = ["src"]
 shadow_scholar = [
     "py.typed",
     "src/shadow_scholar/collections/queries/*.sql",
+    "src/shadow_scholar/app/chat_s2/queries/*.sql",
+    "src/shadow_scholar/app/pdod/examples/*.jsonl",
 ]
 
 

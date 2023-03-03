@@ -15,9 +15,9 @@ pip install .
 
 ## Available Scripts
 
-Each command is run with `python -m shadow_scholar <command>`.
+Each command is run with `shadow <command>`.
 
-For a full list of commands, run `python -m shadow_scholar -h`.
+For a full list of commands, run `shadow -h`.
 
 ### Collecting Data
 
@@ -88,7 +88,7 @@ def my_script(
 The `cli` decorator takes three arguments: the name of the script, a list
 of arguments, and a list of requirements. The name of the script should be
 the name a user would use to run the script from the command line. In the
-example above, the user would run the script with `python -m shadow_scholar
+example above, the user would run the script with `shadow
 scripts_collection.my_script`.
 
 **Step 5**: Add arguments to your script. Each argument should be an instance
