@@ -1,10 +1,12 @@
 import datetime
 import json
 import multiprocessing
+import os
 import sys
 from pathlib import Path
 from time import sleep
-from typing import Any, Dict, Literal, Optional, Union
+import time
+from typing import Any, Dict, Literal, NamedTuple, Optional, Union
 
 from shadow_scholar.cli import Argument, cli, safe_import
 
@@ -13,11 +15,10 @@ with safe_import():
     import gradio as gr
     import requests
     import torch
-
-    from shadow_scholar.app.llama.facebook_llama.example import (
-        load,
-        setup_model_parallel,
+    from fairscale.nn.model_parallel.initialize import (    # type: ignore
+        initialize_model_parallel
     )
+    from llama import LLaMA, ModelArgs, Tokenizer, Transformer  # type: ignore
 
 
 NUM_GPUS_MAP = {
@@ -26,6 +27,88 @@ NUM_GPUS_MAP = {
     "30B": 4,
     "65B": 8,
 }
+
+
+class MpEnv(NamedTuple):
+    local_rank: int
+    world_size: int
+
+    @classmethod
+    def auto(cls):
+        return cls(
+            local_rank=int(os.environ.get("LOCAL_RANK", -1)),
+            world_size=int(os.environ.get("WORLD_SIZE", -1)),
+        )
+
+
+def configure_model_parallel() -> MpEnv:
+    env = MpEnv.auto()
+
+    torch.distributed.init_process_group("nccl")    # pyright: ignore
+    initialize_model_parallel(env.world_size)
+    torch.cuda.set_device(env.local_rank)
+
+    # seed all processes with the same seed
+    torch.manual_seed(42)
+    return env
+
+
+def load_model_and_tokenizer(
+    llama_dir: Union[str, Path],
+    model_name: str,
+    env: MpEnv,
+    seq_len: int = 1024,
+    batch_size: int = 32,
+) -> 'LLaMA':
+    start_load_op = time.time()
+
+    llama_dir = Path(llama_dir)
+
+    if not llama_dir.exists():
+        raise ValueError(f"LLaMA directory does not exist: {llama_dir}")
+
+    if model_name not in NUM_GPUS_MAP:
+        raise ValueError(f"Invalid model name: {model_name}")
+
+    model_path = llama_dir / model_name
+
+    if not model_path.exists():
+        raise ValueError(f"Model path does not exist: {model_path}")
+
+    checkpoints = sorted(model_path.glob("*.pth"))
+    if env.world_size != len(checkpoints):
+        raise ValueError(
+            f"Found {len(checkpoints)} shards, but world is {env.world_size}"
+        )
+
+    ckpt_path = checkpoints[env.local_rank]
+
+    print(f"Loading {ckpt_path} to GPU {env.local_rank}...")
+    checkpoint = torch.load(ckpt_path, map_location="cpu")
+    with open(Path(model_path) / "params.json", "r") as f:
+        params = json.loads(f.read())
+
+    # create model configuration
+    params.update({'max_seq_len': seq_len, 'max_batch_size': batch_size})
+    model_args = ModelArgs(**params)
+
+    # spin-up tokenizer
+    tokenizer = Tokenizer(model_path=llama_dir / "tokenizer.model")
+
+    # create model and set parameters up
+    model_args.vocab_size = tokenizer.n_words
+    torch.set_default_tensor_type(torch.cuda.HalfTensor)    # pyright: ignore
+    model = Transformer(model_args)
+    torch.set_default_tensor_type(torch.FloatTensor)
+    model.load_state_dict(checkpoint, strict=False)
+
+    # wrap up model in a LLaMA object
+    generator = LLaMA(model, tokenizer)
+
+    # complete message
+    delta = time.time() - start_load_op
+    print(f"Loaded in {delta:.2f} s on GPU {env.local_rank}.")
+    return generator
 
 
 class UI:
@@ -204,12 +287,23 @@ def run_llama_demo(
     num_gpus = NUM_GPUS_MAP[model_name]
 
     try:
-        local_rank, world_size = setup_model_parallel()
+        import llama    # noqa: F401    # pyright: ignore
+    except ImportError:
+        msg = (
+            "LLaMA is not installed; you have to do so manually."
+            "Please run pip install git+https://github.com/facebookresearch/"
+            "llama.git@76066b1"
+        )
+        print(msg, file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        mp = configure_model_parallel()
     except ValueError:
         # something went wrong with model parallel setup
-        local_rank, world_size = -1, -1
+        mp = MpEnv(-1, -1)
 
-    if world_size < 0:
+    if mp.world_size < 0:
         message = (
             "This application is meant to be launched with "
             "`torch.distributed.launch`, but it appears that "
@@ -228,7 +322,7 @@ def run_llama_demo(
     if logdir:
         current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         logdir = Path(f"{logdir}/{model_name}_{current_date}.jsonl")
-        if local_rank == 0:
+        if mp.local_rank == 0:
             logdir.parent.mkdir(parents=True, exist_ok=True)
 
     ui = UI(
@@ -239,7 +333,7 @@ def run_llama_demo(
     )
 
     ps = []
-    if local_rank == 0:
+    if mp.local_rank == 0:
         # start UI and communication server
         ps.append(multiprocessing.Process(target=ui.start_server))
         ps.append(multiprocessing.Process(target=ui.start_ui))
@@ -247,16 +341,17 @@ def run_llama_demo(
     for p in ps:
         p.start()
 
-    print(f"Starting Llama demo, rank: {local_rank}")
+    print(f"Starting Llama demo, rank: {mp.local_rank}")
 
     try:
         # load models
         model_root = model_root.rstrip("/")
-        generator = load(
-            ckpt_dir=f"{model_root}/{model_name}",
-            tokenizer_path=f"{model_root}/tokenizer.model",
-            local_rank=local_rank,
-            world_size=world_size,
+        generator = load_model_and_tokenizer(
+            llama_dir=model_root,
+            model_name=model_name,
+            env=mp,
+            seq_len=1024,
+            batch_size=32,
         )
 
         torch.distributed.barrier()  # pyright: ignore
@@ -267,8 +362,9 @@ def run_llama_demo(
                 sleep(1)
                 continue
 
-            if local_rank == 0:
-                print(f"RANK {local_rank}:", json.dumps(input_data, indent=2))
+            if mp.local_rank == 0:
+                content = json.dumps(input_data, indent=2)
+                print(f"RANK {mp.local_rank}: {content}")
 
             text = input_data["text"].strip()
 
@@ -291,10 +387,11 @@ def run_llama_demo(
                     )
                     f.write(data + "\n")
 
-            if local_rank == 0:
-                print(f"RANK {local_rank}:", json.dumps(output_data, indent=2))
+            if mp.local_rank == 0:
+                data = json.dumps(output_data, indent=2)
+                print(f"RANK {mp.local_rank}: {data}")
 
-            if local_rank == 0:
+            if mp.local_rank == 0:
                 ui.set("output", output_data)
                 ui.delete("input")
                 sleep(1)
@@ -304,7 +401,7 @@ def run_llama_demo(
         for p in ps:
             p.terminate()
             p.join()
-        if local_rank == 0:
+        if mp.local_rank == 0:
             gr.close_all()
 
 
