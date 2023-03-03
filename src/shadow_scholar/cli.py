@@ -123,15 +123,36 @@ class EntryPoint(Generic[PS, RT]):
             )
         return self.func(*args, **kwargs)
 
-    def cli(self, args: Optional[List[str]] = None) -> RT:
+    def cli(
+        self,
+        args: Optional[List[str]] = None,
+        file_config: Optional[Dict[str, Any]] = None
+    ) -> RT:
         """Run the function from the command line."""
+
+        file_config = file_config or {}
+
         ap = ArgumentParser(f"shadow-scholar {self.name}")
         for arg in self.args:
             ap.add_argument(*arg.args, **arg.kwargs)
 
+        # parse command line arguments, merge them with json config
+        # if one is provided.
         opts, *_ = ap.parse_known_args(args)
+        cli_config = vars(opts)
 
-        parsed_args = inspect.signature(self.func).bind(**vars(opts)).arguments
+        # only override with file options that are not already set
+        # by the command line or that have a value that is equal to defaults
+        config = {
+            **cli_config,
+            **{
+                k: v for k, v in file_config.items()
+                if k not in cli_config or ap.get_default(k) == cli_config[k]
+            }
+        }
+
+        # actually bind the arguments to the to function args and run the cli
+        parsed_args = inspect.signature(self.func).bind(**config).arguments
         return self(**parsed_args)  # pyright: ignore
 
     @classmethod
@@ -300,6 +321,11 @@ class Registry:
             action="store_true",
             help="List the requirements for all entrypoints.",
         )
+        parser.add_argument(
+            '-c',
+            '--config-path',
+            help='Path to the config file. Complements cli options.'
+        )
 
         # command line arguments; excluding the first one, which is the
         # name of the script
@@ -307,7 +333,12 @@ class Registry:
 
         # the entrypoint could be any of the arguments that is not an option
         entrypoint_positions = [
-            i for i, p in enumerate(args_) if not p.startswith("-")
+            i for i in range(len(args_))
+            if not (
+                args_[i].startswith("-")    # ... is an option
+                or args_[i - 1] == "-c"        # ... its the path for config
+                or args_[i - 1] == "--config-path"  # ... same as above
+            )
         ]
         if len(entrypoint_positions) > 0:
             # separate between the global arguments and the any
@@ -339,11 +370,15 @@ class Registry:
             sys.exit(1)
 
         if opts.list_requirements:
-            n, r = entrypoint.name, entrypoint.reqs
-            print(f"Requirements for {n}: {' '.join(r)}", file=sys.stderr)
-            sys.exit(1)
+            print(' '.join(entrypoint.reqs))
+            sys.exit(0)
 
-        entrypoint.cli(post_args)
+        config = {}
+        if opts.config_path:
+            with open(opts.config_path) as f:
+                config = json.load(f)
+
+        entrypoint.cli(args=post_args, file_config=config)
 
 
 @contextmanager
