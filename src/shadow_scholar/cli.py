@@ -311,39 +311,45 @@ class Registry:
         # name of the script
         args_ = sys.argv[1:]
 
-        # the entrypoint is the first argument that is in the registry;
-        # if none is found, we raise an error
+        # the entrypoint could be any of the arguments that is not an option
         entrypoint_positions = [
-            i for i, p in enumerate(args_) if p in self._registry
+            i for i, p in enumerate(args_) if not p.startswith("-")
         ]
-        if len(entrypoint_positions) == 0:
-            print("No entrypoint provided!", file=sys.stderr)
-            print(self._formatted_entrypoints(), file=sys.stderr)
-
-        # separate between the global arguments and the any
-        # argument that comes after the mention of the first entrypoint
-        pre_args, entrypoint_name, post_args = (
-            args_[: (ep := entrypoint_positions[0])],
-            args_[ep],
-            args_[ep + 1 :],
-        )
+        if len(entrypoint_positions) > 0:
+            # separate between the global arguments and the any
+            # argument that comes after the mention of the first entrypoint
+            pre_args, entry_name, post_args = (
+                args_[: (ep := entrypoint_positions[0])],
+                args_[ep],
+                args_[ep + 1 :],
+            )
+        else:
+            pre_args, entry_name, post_args = args_, None, []
 
         # get any options for shadow-scholar cli itself
         opts = parser.parse_args(pre_args)
 
-        # lookup the entrypoint; we don't need to check if it exists
-        # because we already did that above.
-        entrypoint = self._registry[entrypoint_name]
+        if opts.list_entrypoints:
+            print(self._formatted_entrypoints())
+            sys.exit(1)
+
+        entrypoint = self._registry.get(entry_name, None)  # type: ignore
+        if entrypoint is None:
+            msg = (
+                "No entrypoint "
+                + (f"with name `{entry_name}`." if entry_name else "provided.")
+                + " Please run again with one of the following names: "
+                + ", ".join(sorted(self._registry))
+            )
+            print(msg, file=sys.stderr)
+            sys.exit(1)
 
         if opts.list_requirements:
             n, r = entrypoint.name, entrypoint.reqs
-            print(f"Requirements for {n}: {' '.join(r)}")
+            print(f"Requirements for {n}: {' '.join(r)}", file=sys.stderr)
             sys.exit(1)
-        elif opts.list_entrypoints:
-            print(self._formatted_entrypoints())
-            sys.exit(1)
-        else:
-            entrypoint.cli(post_args)
+
+        entrypoint.cli(post_args)
 
 
 @contextmanager

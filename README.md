@@ -15,17 +15,9 @@ pip install .
 
 ## Available Scripts
 
-Each command is run with `shadow <command>`.
+Each script is launched with `shadow <entrypoint_name>`.
+For a full list of all entry points, run `shadow -l`.
 
-For a full list of commands, run `shadow -h`.
-
-### Collecting Data
-
-1. `collections.s2orc`: Collects data from the [S2ORC](https://allenai.org/data/s2orc) dataset using an Athena query.
-
-### Applications
-
-1. `app.pdod`: Runs models for the Paper Details On Demand project.
 
 ## Getting Access to AWS services
 

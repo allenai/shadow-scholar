@@ -6,13 +6,12 @@ from pathlib import Path
 from time import sleep
 from typing import Any, Dict, Literal, Optional, Union
 
-import requests
-
 from shadow_scholar.cli import Argument, cli, safe_import
 
 with safe_import():
     import fire
     import gradio as gr
+    import requests
     import torch
 
     from shadow_scholar.app.llama.facebook_llama.example import (
@@ -192,6 +191,7 @@ class UI:
         "fairscale",
         "fire",
         "sentencepiece",
+        "requests",
     ],
 )
 def run_llama_demo(
