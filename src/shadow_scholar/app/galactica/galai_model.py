@@ -311,7 +311,6 @@ class Model:
             input_v[loc, 0] = cast(int, self.tokenizer.eos_token_id)
         return input_v
 
-    @torch.inference_mode()
     def generate(
         self,
         input_text: Union[str, List[str]],
@@ -377,57 +376,58 @@ class Model:
                 generated sequence. Default is True.
         """
 
-        texts = [input_text] if isinstance(input_text, str) else input_text
-        input_v = self._tokenize(texts, new_doc)
-        options = {}
-        if penalty_alpha is not None:
-            options["penalty_alpha"] = float(penalty_alpha)
-            options["top_k"] = int(top_k) if top_k is not None else 0
-        elif top_p is not None:
-            options["do_sample"] = True
-            options["top_p"] = float(top_p)
-        elif top_k is not None:
-            options["do_sample"] = True
-            options["top_k"] = int(top_k)
+        with torch.inference_mode():
+            texts = [input_text] if isinstance(input_text, str) else input_text
+            input_v = self._tokenize(texts, new_doc)
+            options = {}
+            if penalty_alpha is not None:
+                options["penalty_alpha"] = float(penalty_alpha)
+                options["top_k"] = int(top_k) if top_k is not None else 0
+            elif top_p is not None:
+                options["do_sample"] = True
+                options["top_p"] = float(top_p)
+            elif top_k is not None:
+                options["do_sample"] = True
+                options["top_k"] = int(top_k)
 
-        if extra_options:
-            options.update(extra_options)
+            if extra_options:
+                options.update(extra_options)
 
-        out = self.model.generate(
-            input_v,
-            max_new_tokens=int(max_new_tokens),
-            return_dict_in_generate=True,
-            output_hidden_states=False,
-            num_beams=int(num_beams),
-            num_return_sequences=int(num_return_sequences),
-            **options,
-        )
-
-        out_tokens = out["sequences"]  # pyright: ignore
-        if not return_full_text:
-            out_tokens = out_tokens[:, input_v.shape[1] :]
-        # we keep special tokens such as [START_REF] or <work>
-        decoded = self.tokenizer.batch_decode(
-            out_tokens,
-            skip_special_tokens=False,
-            clean_up_tokenization_spaces=False,
-        )
-        # so we manually remove </s> and <pad>
-        decoded = [
-            text.replace(self.tokenizer.eos_token, "").replace(
-                self.tokenizer.pad_token, ""
+            out = self.model.generate(
+                input_v,
+                max_new_tokens=int(max_new_tokens),
+                return_dict_in_generate=True,
+                output_hidden_states=False,
+                num_beams=int(num_beams),
+                num_return_sequences=int(num_return_sequences),
+                **options,
             )
-            for text in decoded
-        ]
 
-        if num_return_sequences == 1:
-            return decoded[0] if isinstance(input_text, str) else decoded
-        if isinstance(input_text, str):
-            return decoded
-        else:
-            return [
-                decoded[
-                    num_return_sequences * i : num_return_sequences * (i + 1)
-                ]
-                for i in range(len(texts))
+            out_tokens = out["sequences"]  # pyright: ignore
+            if not return_full_text:
+                out_tokens = out_tokens[:, input_v.shape[1] :]
+            # we keep special tokens such as [START_REF] or <work>
+            decoded = self.tokenizer.batch_decode(
+                out_tokens,
+                skip_special_tokens=False,
+                clean_up_tokenization_spaces=False,
+            )
+            # so we manually remove </s> and <pad>
+            decoded = [
+                text.replace(self.tokenizer.eos_token, "").replace(
+                    self.tokenizer.pad_token, ""
+                )
+                for text in decoded
             ]
+
+            if num_return_sequences == 1:
+                return decoded[0] if isinstance(input_text, str) else decoded
+            if isinstance(input_text, str):
+                return decoded
+            else:
+                return [
+                    decoded[
+                        num_return_sequences * i : num_return_sequences * (i + 1)
+                    ]
+                    for i in range(len(texts))
+                ]
