@@ -1,0 +1,8 @@
+{
+    "appName": "shadow-scholar",
+    "contact": "lucas",
+    "team": "s2research",
+    "replicas": {
+        "prod": 1
+    }
+}
