@@ -18,16 +18,22 @@
         std.length(std.filter(util.isCustomHost, hosts)) > 0,
 
     /**
-     * Returns a list of hostnames, given the provided environment identifier and Skiff application
-     * configuration.
+     * Returns a list of hostnames, given the provided environment identifier, Skiff config
+     * and top level domain.
+     *
+     * If the app name is `hello-world`, we use the app name as the host.
      */
-    getHosts(env, config):
-        local tld = '.apps.allenai.org';
+    getHosts(env, appId, config, tld):
+        local appName =
+            if appId == 'hello-world' then
+                config.appName
+            else
+                appId + '.' + config.appName;
         local defaultHosts =
             if env == 'prod' then
-                [ config.appName + tld ]
+                [ appName + tld ]
             else
-                [ config.appName + '-' + env + tld ];
+                [ appName + '-' + env + tld ];
         if (
             env == 'prod' &&
             'customDomains' in config &&
@@ -55,7 +61,26 @@
                 { secretName: fqn + '-tls' }
             else
                 {},
-    }
+    },
 
+    /**
+     * Returns Ingress annotations that enable authentication, given the provided Skiff config.
+     */
+    getAuthAnnotations(config, tld):
+        if !('login' in config) then
+            {}
+        else if config.login == "ai2" then
+            {
+                'nginx.ingress.kubernetes.io/auth-url': 'https://ai2.login' + tld + '/oauth2/auth',
+                'nginx.ingress.kubernetes.io/auth-signin': 'https://ai2.login' + tld + '/oauth2/start?rd=https://$host$request_uri',
+                'nginx.ingress.kubernetes.io/auth-response-headers': 'X-Auth-Request-User, X-Auth-Request-Email'
+            }
+        else if config.login == "google" then
+            {
+                'nginx.ingress.kubernetes.io/auth-url': 'https://google.login' + tld + '/oauth2/auth',
+                'nginx.ingress.kubernetes.io/auth-signin': 'https://google.login' + tld + '/oauth2/start?rd=https://$host$request_uri',
+                'nginx.ingress.kubernetes.io/auth-response-headers': 'X-Auth-Request-User, X-Auth-Request-Email'
+            }
+        else
+            error 'Unknown login type: ' + config.login,
 }
-
