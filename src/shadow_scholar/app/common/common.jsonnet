@@ -7,6 +7,7 @@
  */
 
 local config = import '../../../../skiff.json';
+local util = import './util.jsonnet';
 
 {
     /**
@@ -24,8 +25,9 @@ local config = import '../../../../skiff.json';
      * @param branch        {string}    The branch name.
      * @param repo          {string}    The repo name.
      * @param buildId       {string}    The Google Cloud Build ID.
+     * @param gpu           {string}    The type of GPU to use e.g. 'k80', 'p100', 't4x4'.
      */
-    ShadowApp(id, image, cause, sha, cpu, memory, env, branch, repo, buildId):
+    ShadowApp(id, image, cause, sha, cpu, memory, env, branch, repo, buildId, gpu=''):
         // A list of hostnames served by your application. By default your application's
         // `prod` environment will receive requests made to `$appName.apps.allenai.org` and
         // non-production environments will receive requests made to `$appName-$env.apps.allenai.org`.
@@ -100,27 +102,27 @@ local config = import '../../../../skiff.json';
 
         // Running on a GPU requires a special limit on the container, and a
         // specific nodeSelector.
-        local gpuInConfig = std.count(std.objectFields(config), "gpu") > 0;
+        local gpuInConfig = gpu != '';
 
         // determine number of gpus
         local gpuLimits = if gpuInConfig then
-            if config.gpu == "k80x2" then
+            if gpu == "k80x2" then
                 { 'nvidia.com/gpu': 2 }
-            else if config.gpu == "t4x4" then
+            else if gpu == "t4x4" then
                 { 'nvidia.com/gpu': 4 }
             else
                 { 'nvidia.com/gpu': 1 }
         else {};
 
         local nodeSelector = if gpuInConfig then
-            if config.gpu == "k80" || config.gpu == "k80x2" then
+            if gpu == "k80" || gpu == "k80x2" then
                 { 'cloud.google.com/gke-accelerator': 'nvidia-tesla-k80' }
-            else if config.gpu == "p100" then
+            else if gpu == "p100" then
                 { 'cloud.google.com/gke-accelerator': 'nvidia-tesla-p100' }
-            else if config.gpu == "t4x4" then
+            else if gpu == "t4x4" then
                 { 'cloud.google.com/gke-accelerator': 'nvidia-tesla-t4' }
             else
-                error "invalid GPU specification; expected 'k80', 'k80x2', 'p100' or 't4x4', but got: " + config.gpu
+                error "invalid GPU specification; expected 'k80', 'k80x2', 'p100' or 't4x4', but got: " + gpu
         else
              { };
 
