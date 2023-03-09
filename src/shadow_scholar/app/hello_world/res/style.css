@@ -1,0 +1,11 @@
+#center {
+    text-align: center;
+}
+
+#logo {
+    width: 400px;
+    height: auto;
+    margin: auto;
+    border: 0px;
+    color: #ffffff00;
+}
