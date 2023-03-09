@@ -23,19 +23,14 @@
      *
      * If the app name is `hello-world`, we use the app name as the host.
      */
-    getHosts(env, appId, config, tld):
-        local appName =
-            if appId == 'hello-world' then
-                config.appName
-            else
-                appId + '.' + config.appName;
+    getHosts(env, config, tld):
         local defaultHosts =
-            if env == 'prod' then
-                [ appName + tld ]
+            if env == 'hello-world' then
+                [ config.appName + tld ]
             else
-                [ appName + '-' + env + tld ];
+                [ env + '.' + config.appName + tld ];
         if (
-            env == 'prod' &&
+            env == 'hello-world' &&
             'customDomains' in config &&
             std.isArray(config.customDomains) &&
             std.length(config.customDomains) > 0

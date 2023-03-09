@@ -2,18 +2,18 @@ steps:
 - id: pull
   name: gcr.io/cloud-builders/docker
   entrypoint: /bin/bash
-  args: [ -c, docker pull gcr.io/$PROJECT_ID/$REPO_NAME-$_SUBMODULE_PATH:latest || exit 0 ]
+  args: [ -c, docker pull gcr.io/$PROJECT_ID/$REPO_NAME-$_ENV:latest || exit 0 ]
 
 - id: build
   name: gcr.io/cloud-builders/docker
   args: [
     'build',
     '--file', 'app/Dockerfile',
-    '--tag', 'gcr.io/$PROJECT_ID/$REPO_NAME-$_SUBMODULE_PATH:latest',
-    '--tag', 'gcr.io/$PROJECT_ID/$REPO_NAME-$_SUBMODULE_PATH:$COMMIT_SHA',
-    '--cache-from', 'gcr.io/$PROJECT_ID/$REPO_NAME-$_SUBMODULE_PATH:latest',
+    '--tag', 'gcr.io/$PROJECT_ID/$REPO_NAME-$_ENV:latest',
+    '--tag', 'gcr.io/$PROJECT_ID/$REPO_NAME-$_ENV:$COMMIT_SHA',
+    '--cache-from', 'gcr.io/$PROJECT_ID/$REPO_NAME-$_ENV:latest',
     '--build-arg', 'BUILDKIT_INLINE_CACHE=1',
-    '--build-arg', 'SHADOW_APP_NAME=app.$_SUBMODULE_PATH',
+    '--build-arg', 'SHADOW_APP_NAME=app.$_ENV',
     '.'
   ]
   waitFor: [ pull ]
@@ -22,7 +22,7 @@ steps:
   name: 'gcr.io/cloud-builders/docker'
   args: [
     'push',
-    'gcr.io/$PROJECT_ID/$REPO_NAME-$_SUBMODULE_PATH:$COMMIT_SHA',
+    'gcr.io/$PROJECT_ID/$REPO_NAME-$_ENV:$COMMIT_SHA',
   ]
   waitFor: [ build ]
 
@@ -33,7 +33,7 @@ steps:
     '-y',
     '--output-file', './webapp.yaml',
     '--tla-str', 'env=$_ENV',
-    '--tla-str', 'image=gcr.io/$PROJECT_ID/$REPO_NAME-$_SUBMODULE_PATH:$COMMIT_SHA',
+    '--tla-str', 'image=gcr.io/$PROJECT_ID/$REPO_NAME-$_ENV:$COMMIT_SHA',
     '--tla-str', 'sha=$COMMIT_SHA',
     '--tla-str', 'cause=Automated Skiff Deploy SHA:$COMMIT_SHA BUILD:$BUILD_ID',
     '--tla-str', 'branch=$BRANCH_NAME',
@@ -41,26 +41,26 @@ steps:
     '--tla-str', 'buildId=$BUILD_ID',
     './webapp.jsonnet'
   ]
-  dir: 'src/shadow_scholar/app/$_SUBMODULE_PATH/.skiff'
+  dir: '.skiff'
 
 - id: 'deploy'
   name: 'gcr.io/ai2-reviz/rudder'
   args: [ 'deploy', '-f', 'webapp.yaml' ]
-  dir: 'src/shadow_scholar/app/$_SUBMODULE_PATH/.skiff'
+  dir: '.skiff'
   waitFor: [ push, config ]
 
 substitutions:
-  _ENV: prod
+  _ENV: hello_world
 
 images: [
-  'gcr.io/$PROJECT_ID/$REPO_NAME-$_SUBMODULE_PATH:$COMMIT_SHA',
-  'gcr.io/$PROJECT_ID/$REPO_NAME-$_SUBMODULE_PATH:latest'
+  'gcr.io/$PROJECT_ID/$REPO_NAME-$_ENV:$COMMIT_SHA',
+  'gcr.io/$PROJECT_ID/$REPO_NAME-$_ENV:latest'
 ]
 
 artifacts:
   objects:
-    location: 'gs://skiff-archive/$REPO_NAME/$_ENV/$_SUBMODULE_PATH/$BUILD_ID/$COMMIT_SHA'
-    paths: ['src/shadow_scholar/app/$_SUBMODULE_PATH/.skiff/webapp.yaml']
+    location: 'gs://skiff-archive/$REPO_NAME/$_ENV/$BUILD_ID/$COMMIT_SHA'
+    paths: ['.skiff/webapp.yaml']
 
 options:
   env:
