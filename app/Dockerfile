@@ -9,6 +9,7 @@ WORKDIR /shadow
 # copy over the shadow scholar app code so we can pip install it
 COPY pyproject.toml ./
 COPY src/ ./src
+COPY app/config.json ./app/config.json
 
 # install main shadow scholar package, as weel as dependencies
 # for this specific app (which I get with -r followed by the app name)

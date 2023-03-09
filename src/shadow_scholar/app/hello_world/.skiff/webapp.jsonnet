@@ -13,5 +13,18 @@ function(image, cause, sha, env, branch, repo, buildId)
     // https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/\#resource-units-in-kubernetes
     local cpu = '50m';
     local memory = '200Mi';
-    common.ShadowApp('hello-world', image, cause, sha, cpu, memory, env, branch, repo, buildId)
+    local gpu = ''; // 'k80', 'p100', 't4x4', etc.
+    local environmentVariables = [
+    //    { name: "NAME", value: "VALUE" },
+    //    {
+    //        name: "MY_SECRET",
+    //        valueFrom: {
+    //            secretKeyRef: {
+    //                name: "k8s-secret-name",
+    //                key: "password"
+    //            }
+    //        }
+    //    },
+    ];
+    common.ShadowApp('hello-world', image, cause, sha, cpu, memory, env, branch, repo, buildId, gpu, environmentVariables)
     

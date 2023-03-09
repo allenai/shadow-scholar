@@ -26,8 +26,9 @@ local util = import './util.jsonnet';
      * @param repo          {string}    The repo name.
      * @param buildId       {string}    The Google Cloud Build ID.
      * @param gpu           {string}    The type of GPU to use e.g. 'k80', 'p100', 't4x4'.
+     * @param environmentVariables {list} A list of environment variables to be set in the container.
      */
-    ShadowApp(id, image, cause, sha, cpu, memory, env, branch, repo, buildId, gpu=''):
+    ShadowApp(id, image, cause, sha, cpu, memory, env, branch, repo, buildId, gpu, environmentVariables):
         // A list of hostnames served by your application. By default your application's
         // `prod` environment will receive requests made to `$appName.apps.allenai.org` and
         // non-production environments will receive requests made to `$appName-$env.apps.allenai.org`.
@@ -326,7 +327,8 @@ local util = import './util.jsonnet';
                                     },
                                     limits: { }
                                        + gpuLimits # only the first container should have gpuLimits applied
-                                }
+                                },
+                                env: environmentVariables
                             }
                         ]
                     }
