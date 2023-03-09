@@ -2,8 +2,11 @@
 
 This document outlines how to deploy a new Shadow app to Skiff.
 
+## Creating the Skiff configuration
+
 After you've added your app to the `shadow-scholar` repository under `src/shadow_scholar/app/`,
-you'll need to add a Skiff configuration for it.
+you'll need to add a Skiff configuration for it. This configuration uses the common config
+from `src/shadow_scholar/app/common/` and defines the Kubernetes resources needed to run the app.
 
 ```bash
 $ export APP_NAME=hello-world
@@ -42,11 +45,15 @@ function(image, cause, sha, env, branch, repo, buildId)
 EOF
 ```
 
-Then you'll need to add a Cloud Build trigger for the app (note this will only build when the included files are changed).
+## Adding a Google Cloud Build trigger
+
+You'll need to add a Google Cloud Build trigger for the app (note this will only build when the included files are changed).
 This step requires permissions to create triggers in the `ai2-reviz` project, so you may have to ask ReViz to do it.
 
 ```bash
-gcloud beta builds triggers create github --project=ai2-reviz --trigger-config <(cat <<EOF
+$ export APP_NAME=hello-world
+$ export APP_DIR=hello_world
+$ gcloud beta builds triggers create github --project=ai2-reviz --trigger-config <(cat <<EOF
 {
     "name": "deploy-shadow-scholar-$APP_NAME-prod",
     "description": "Deploy $APP_NAME to production",
