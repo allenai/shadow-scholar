@@ -4,6 +4,6 @@
     "team": "s2research",
     "login": "ai2",
     "replicas": {
-        "prod": 0
+        "prod": 1
     }
 }
