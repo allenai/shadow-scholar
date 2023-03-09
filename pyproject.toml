@@ -52,13 +52,7 @@ requires = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-shadow_scholar = [
-    "py.typed",
-    "src/shadow_scholar/collections/queries/*.sql",
-    "src/shadow_scholar/app/chat_s2/queries/*.sql",
-    "src/shadow_scholar/app/pdod/examples/*.jsonl",
-]
-
+shadow_scholar = ["py.typed"]
 
 [tool.black]
 line-length = 79
