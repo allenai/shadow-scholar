@@ -427,7 +427,9 @@ class Model:
             else:
                 return [
                     decoded[
-                        num_return_sequences * i : num_return_sequences * (i + 1)
+                        num_return_sequences
+                        * i : num_return_sequences
+                        * (i + 1)
                     ]
                     for i in range(len(texts))
                 ]

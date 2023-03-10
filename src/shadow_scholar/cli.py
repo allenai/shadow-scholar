@@ -151,7 +151,7 @@ class EntryPoint(Generic[PS, RT]):
     def cli(
         self,
         args: Optional[List[str]] = None,
-        file_config: Optional[Dict[str, Any]] = None
+        file_config: Optional[Dict[str, Any]] = None,
     ) -> RT:
         """Run the function from the command line."""
 
@@ -171,9 +171,10 @@ class EntryPoint(Generic[PS, RT]):
         config = {
             **cli_config,
             **{
-                k: v for k, v in file_config.items()
+                k: v
+                for k, v in file_config.items()
                 if k not in cli_config or ap.get_default(k) == cli_config[k]
-            }
+            },
         }
 
         # actually bind the arguments to the to function args and run the cli
@@ -347,9 +348,9 @@ class Registry:
             help="List the requirements for all entrypoints.",
         )
         parser.add_argument(
-            '-c',
-            '--config-path',
-            help='Path to the config file. Complements cli options.'
+            "-c",
+            "--config-path",
+            help="Path to the config file. Complements cli options.",
         )
 
         # command line arguments; excluding the first one, which is the
@@ -358,10 +359,11 @@ class Registry:
 
         # the entrypoint could be any of the arguments that is not an option
         entrypoint_positions = [
-            i for i in range(len(args_))
+            i
+            for i in range(len(args_))
             if not (
-                args_[i].startswith("-")    # ... is an option
-                or args_[i - 1] == "-c"        # ... its the path for config
+                args_[i].startswith("-")  # ... is an option
+                or args_[i - 1] == "-c"  # ... its the path for config
                 or args_[i - 1] == "--config-path"  # ... same as above
             )
         ]
@@ -395,7 +397,7 @@ class Registry:
             sys.exit(1)
 
         if opts.list_requirements:
-            print(' '.join(r.name for r in entrypoint.reqs))
+            print(" ".join(r.name for r in entrypoint.reqs))
             sys.exit(0)
 
         config = {}

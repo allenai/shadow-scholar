@@ -1,6 +1,6 @@
 from pathlib import Path
-from shadow_scholar.cli import cli, safe_import, Argument
 
+from shadow_scholar.cli import Argument, cli, safe_import
 
 with safe_import():
     import gradio as gr
@@ -13,15 +13,15 @@ IMG_URI = Path(__file__).parent / "res" / "logo.png"
 
 
 @cli(
-    'app.hello_world',
+    "app.hello_world",
     arguments=[
-        Argument('--host', default='0.0.0.0', help='Host to bind to'),
-        Argument('--port', default=7860, help='Port to bind to')
+        Argument("--host", default="0.0.0.0", help="Host to bind to"),
+        Argument("--port", default=7860, help="Port to bind to"),
     ],
-    requirements=['gradio'],
+    requirements=["gradio"],
 )
 def run_hello_world(host: str, port: int):
-    with open(CSS_URI, 'r') as f:
+    with open(CSS_URI, "r") as f:
         css = f.read()
 
     with gr.Blocks(title="Shadow Scholar", css=css) as app:
@@ -37,7 +37,7 @@ def run_hello_world(host: str, port: int):
             "Shadow Scholar is a collection of tools and applications "
             f"from the [S2 Research Team]({S2R_URL}).\n\nTo learn more about "
             f"this project, please visit our [GitHub repository]({SWS_URL}).",
-            elem_id="center"
+            elem_id="center",
         )
 
     try:

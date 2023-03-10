@@ -16,10 +16,13 @@ with safe_import():
     import requests
     import torch
     from fairscale.nn.model_parallel.initialize import (  # pyright: ignore
-        initialize_model_parallel
+        initialize_model_parallel,
     )
-    from llama import (                                   # pyright: ignore
-        LLaMA, ModelArgs, Tokenizer, Transformer
+    from llama import (  # pyright: ignore
+        LLaMA,
+        ModelArgs,
+        Tokenizer,
+        Transformer,
     )
 
 NUM_GPUS_MAP = {

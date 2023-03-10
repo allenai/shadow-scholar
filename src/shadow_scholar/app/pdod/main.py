@@ -81,11 +81,11 @@ from .slicers import slicer_registry
         ),
         Argument(
             "-ms",
-            '--metrics',
+            "--metrics",
             help="Metrics to use for evaluation",
             type=list,
-            default=None
-        )
+            default=None,
+        ),
     ],
     requirements=[
         "numpy",
