@@ -1,16 +1,14 @@
 <h1 align="center">Shadow Scholar</h1>
 <p align="center">
-    <img src="res/shadow-scholar.png" width="400" height="400" align="center" />
+    <img src="https://raw.githubusercontent.com/allenai/shadow-scholar/main/res/shadow-scholar.png" width="400" height="400" align="center" />
 </p>
 
 ## Installation
 
-To install, simply clone the repository and install with pip:
+To install from PyPI, simply run:
 
 ```bash
-git clone git@github.com:allenai/shadow-scholar.git
-cd shadow-scholar
-pip install .
+pip install shadow-scholar
 ```
 
 ## Available Scripts

@@ -1,7 +1,7 @@
 [project]
 name = "shadow-scholar"
 version = "0.4.0"
-description = "A collection of utilities and demos from the Semantic Scholar Research Team"
+description = "🎓🕶️ A collection of utilities and demos from the Semantic Scholar Research Team 🕶️🎓"
 authors = [
     {name = "Luca Soldaini", email = "lucas@allenai.org" }
 ]
