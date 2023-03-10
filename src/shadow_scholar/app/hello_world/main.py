@@ -35,9 +35,10 @@ def run_hello_world(host: str, port: int):
         )
         gr.Markdown(
             "Shadow Scholar is a collection of tools and applications "
-            f"from the [S2 Research Team]({S2R_URL}).\n\nTo learn more about "
-            f"this project, please visit our [GitHub repository]({SWS_URL}).",
-            elem_id="center",
+            f"from the [S2 Research Team]({S2R_URL}). To learn more about "
+            f"this project, please visit our [GitHub repository]({SWS_URL}). "
+            f"To install shadow scholar, run `pip install shadow-scholar`.",
+            elem_id="center"
         )
 
     try:
