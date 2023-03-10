@@ -79,15 +79,22 @@ from .slicers import slicer_registry
             help="JSON-encoded kwargs for the slicer",
             type=load_kwargs,
         ),
+        Argument(
+            "-ms",
+            '--metrics',
+            help="Metrics to use for evaluation",
+            type=list,
+            default=None
+        )
     ],
     requirements=[
         "numpy",
         "spacy",
         "torch",
-        "scikit-learn",
+        ("scikit-learn", "sklearn"),
         "transformers",
         "unidecode",
-        "sentence-transformers",
+        ("sentence-transformers", "sentence_transformers"),
     ],
 )
 def run_pdod(
@@ -101,7 +108,10 @@ def run_pdod(
     output_path: Optional[str] = None,
     slicer_name: Optional[str] = None,
     slicer_kwargs: Optional[dict] = None,
+    metrics: Optional[List[str]] = None,
 ):
+    metrics = metrics or []
+
     if docs_path:
         dataset = dataset_registry.get("from_files")(
             docs_path=docs_path,

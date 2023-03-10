@@ -86,21 +86,46 @@ class SpecTuple(NamedTuple):
     module: str
 
 
+class NamedRequirement(NamedTuple):
+    name: str
+    package: str
+
+    @classmethod
+    def parse(cls, elem: Union[str, Tuple[str, str]]) -> "NamedRequirement":
+        if isinstance(elem, str):
+            return cls(elem, elem)
+        elif isinstance(elem, tuple):
+            return cls(*elem)
+        else:
+            raise TypeError(f"Expected str or 2-tuple, got {type(elem)}")
+
+    @classmethod
+    def from_list(
+        cls, elems: List[Union[str, Tuple[str, str]]]
+    ) -> List["NamedRequirement"]:
+        return [cls.parse(elem) for elem in elems]
+
+
 class EntryPoint(Generic[PS, RT]):
     def __init__(
         self,
         name: str,
         func: Callable[PS, RT],
         args: List[Argument],
-        reqs: List[str],
+        reqs: List[Union[str, Tuple[str, str]]],
     ):
         self.name = name
         self.func = func
         self.args = args
-        self.reqs = reqs
+
+        # if receiving a tuple, the first element is the name of the
+        # package and the second is the name of the module to import
+        self.reqs = NamedRequirement.from_list(reqs)
 
         # check that all requirements are met (error raised later if not)
-        self.missing_reqs = [r for r in reqs if not necessary(r, soft=True)]
+        self.missing_reqs = [
+            r.name for r in self.reqs if not necessary(r.package, soft=True)
+        ]
 
     @property
     def spec(self) -> SpecTuple:
@@ -118,8 +143,8 @@ class EntryPoint(Generic[PS, RT]):
         if self.missing_reqs:
             raise ModuleNotFoundError(
                 f"Missing requirements: {' '.join(self.missing_reqs)}; "
-                f"run `python -m shadow_scholar {self.name} -l` to list "
-                "all requirements for this entrypoint."
+                f"run `shadow -r {self.name}` to list all requirements for "
+                "this entrypoint."
             )
         return self.func(*args, **kwargs)
 
@@ -161,7 +186,7 @@ class EntryPoint(Generic[PS, RT]):
         func: Callable[PS, RT],
         name: Optional[str] = None,
         arguments: Optional[List[Argument]] = None,
-        requirements: Optional[List[str]] = None,
+        requirements: Optional[List[Union[str, Tuple[str, str]]]] = None,
     ) -> "EntryPoint[PS, RT]":
         """Decorator designed to add function to a registry alongside
         all its arguments and requirements.
@@ -235,7 +260,7 @@ class Registry:
         self,
         name: Optional[str] = None,
         arguments: Optional[List[Argument]] = None,
-        requirements: Optional[List[str]] = None,
+        requirements: Optional[List[Union[str, Tuple[str, str]]]] = None,
     ) -> Callable[[Callable[PS, RT]], "EntryPoint[PS, RT]"]:
         """A decorator to add a function to the registry.
 
@@ -370,7 +395,7 @@ class Registry:
             sys.exit(1)
 
         if opts.list_requirements:
-            print(' '.join(entrypoint.reqs))
+            print(' '.join(r.name for r in entrypoint.reqs))
             sys.exit(0)
 
         config = {}
